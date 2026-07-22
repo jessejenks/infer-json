@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Dict, List
 
 from .type_exprs import (
@@ -56,7 +57,7 @@ def type_to_ts(t: TypeExpr, indent: int = 0) -> str:
         case "atom":
             return t.name
         case "string_literal":
-            return f'"{t.value}"'
+            return json.dumps(t.value)
         case "ref":
             return t.name
         case "map":
