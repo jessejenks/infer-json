@@ -1,0 +1,3 @@
+{ "days": ["Monday", "Wednesday", "Friday", "Friday"], "subOptions": [{ "holidays": ["MLK jr"] }] }
+{ "days": ["Friday"], "subOptions": [{ "holidays": ["Fourth of July"] }] }
+{ "days": ["Tuesday"], "subOptions": [{ "holidays": ["New Year's Eve"] }] }

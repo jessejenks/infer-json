@@ -1,0 +1,4 @@
+{ "type": "dog", "bark": true }
+{ "type": "dog", "bark": false }
+{ "type": "cat", "purr": true }
+{ "type": "cat", "lives": 9 }
