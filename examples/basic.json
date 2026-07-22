@@ -1,0 +1,7 @@
+{
+    "name": "foo",
+    "count": 1,
+    "ratio": 3.14,
+    "completedAt": null,
+    "days": ["Monday", "Wednesday", "Friday"]
+}
