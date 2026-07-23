@@ -47,8 +47,11 @@ def type_eq(a: TypeExpr, b: TypeExpr) -> bool:
 
 def dedup_union_members(members: List[TypeExpr]) -> List[TypeExpr]:
     flat = flatten_union_members(members)
+    has_string = any(m.kind == "atom" and m.name == "string" for m in flat)
     result: List[TypeExpr] = []
     for m in flat:
+        if has_string and m.kind == "string_literal":
+            continue
         if not any(type_eq(m, existing) for existing in result):
             result.append(m)
     return result
