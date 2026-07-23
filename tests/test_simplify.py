@@ -164,3 +164,7 @@ class TestCountLiterals:
     def test_union(self):
         t = UnionType([StringLiteralType("a"), StringLiteralType("b"), IntType])
         assert count_literals(t) == 2
+
+    def test_duplicates_counted_once(self):
+        t = UnionType([StringLiteralType("a"), StringLiteralType("b"), StringLiteralType("a")])
+        assert count_literals(t) == 2

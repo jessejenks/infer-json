@@ -139,14 +139,19 @@ def merge_similar_records(members: List[TypeExpr], threshold: int) -> List[TypeE
     return result
 
 
-def count_literals(t: TypeExpr) -> int:
+def _collect_literal_values(t: TypeExpr, out: set[str]) -> None:
     match t.kind:
         case "string_literal":
-            return 1
+            out.add(t.value)
         case "union":
-            return sum(count_literals(m) for m in flatten_union_members(t.members))
-        case _:
-            return 0
+            for m in t.members:
+                _collect_literal_values(m, out)
+
+
+def count_literals(t: TypeExpr) -> int:
+    values: set[str] = set()
+    _collect_literal_values(t, values)
+    return len(values)
 
 
 def widen_literals(t: TypeExpr, discriminant_key: str | None, config: Config) -> TypeExpr:
