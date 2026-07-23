@@ -78,7 +78,8 @@ TypeExpr: TypeAlias = (
 Unknown = UnknownType()
 Null = NullType()
 StringType = AtomicType("string")
-NumberType = AtomicType("number")
+IntType = AtomicType("int")
+FloatType = AtomicType("float")
 BoolType = AtomicType("boolean")
 
 

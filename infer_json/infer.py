@@ -7,10 +7,11 @@ from .config import Config
 from .merge import merge
 from .type_exprs import (
     BoolType,
+    FloatType,
+    IntType,
     ListType,
     MapType,
     Null,
-    NumberType,
     RecordType,
     StringLiteralType,
     TypeExpr,
@@ -36,8 +37,10 @@ def infer_type(value: Any, config: Config) -> TypeExpr:
         return Null
     if isinstance(value, bool):
         return BoolType
-    if isinstance(value, int) or isinstance(value, float):
-        return NumberType
+    if isinstance(value, int):
+        return IntType
+    if isinstance(value, float):
+        return FloatType
     if isinstance(value, str):
         return StringLiteralType(value)
     if isinstance(value, list):
