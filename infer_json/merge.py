@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, List
 
 from .type_exprs import (
+    FloatType,
     ListType,
     MapType,
     NullableType,
@@ -55,6 +56,8 @@ def merge(a: TypeExpr, b: TypeExpr) -> TypeExpr:
     if a.kind == "atom" and b.kind == "atom":
         if a.name == b.name:
             return a
+        if a.name == "int" and b.name == "float" or b.name == "int" and a.name == "float":
+            return FloatType
         return UnionType([a, b])
 
     if a.kind == "list" and b.kind == "list":

@@ -1,13 +1,16 @@
 from infer_json.config import Config
-from infer_json.emit import extract_named_types, snake_to_pascal, type_to_ts
+from infer_json.emit import extract_named_types, snake_to_pascal
+from infer_json.emit_go import type_to_go
+from infer_json.emit_ts import type_to_ts
 from infer_json.type_exprs import (
     BoolType,
+    FloatType,
+    IntType,
     ListType,
     MapType,
     NamedRef,
     Null,
     NullableType,
-    NumberType,
     RecordType,
     StringLiteralType,
     StringType,
@@ -32,7 +35,8 @@ class TestTypeToTs:
         assert type_to_ts(Unknown) == "unknown"
         assert type_to_ts(Null) == "null"
         assert type_to_ts(StringType) == "string"
-        assert type_to_ts(NumberType) == "number"
+        assert type_to_ts(IntType) == "number"
+        assert type_to_ts(FloatType) == "number"
         assert type_to_ts(BoolType) == "boolean"
 
     def test_literal(self):
@@ -42,7 +46,7 @@ class TestTypeToTs:
         assert type_to_ts(ListType(StringType)) == "string[]"
 
     def test_list_of_union_gets_parens(self):
-        t = ListType(UnionType([StringType, NumberType]))
+        t = ListType(UnionType([StringType, IntType]))
         assert type_to_ts(t) == "(string | number)[]"
 
     def test_nullable(self):
@@ -55,7 +59,7 @@ class TestTypeToTs:
         assert type_to_ts(NamedRef("Foo")) == "Foo"
 
     def test_record(self):
-        t = RecordType({"name": StringType, "age": NumberType})
+        t = RecordType({"name": StringType, "age": IntType})
         result = type_to_ts(t)
         assert "name: string;" in result
         assert "age: number;" in result
@@ -64,6 +68,46 @@ class TestTypeToTs:
         t = RecordType({"name": NullableType(StringType)})
         result = type_to_ts(t)
         assert "name?: string;" in result
+
+
+class TestTypeToGo:
+    def test_primitives(self):
+        assert type_to_go(Unknown) == "any"
+        assert type_to_go(Null) == "any"
+        assert type_to_go(StringType) == "string"
+        assert type_to_go(IntType) == "int"
+        assert type_to_go(FloatType) == "float64"
+        assert type_to_go(BoolType) == "bool"
+
+    def test_literal(self):
+        assert type_to_go(StringLiteralType("foo")) == "string"
+
+    def test_list(self):
+        assert type_to_go(ListType(StringType)) == "[]string"
+
+    def test_list_of_union_gets_parens(self):
+        t = ListType(UnionType([StringType, IntType]))
+        assert type_to_go(t) == "[]any"
+
+    def test_nullable(self):
+        assert type_to_go(NullableType(StringType)) == "*string"
+
+    def test_map(self):
+        assert type_to_go(MapType(StringType)) == "map[string]string"
+
+    def test_ref(self):
+        assert type_to_go(NamedRef("Foo")) == "Foo"
+
+    def test_record(self):
+        t = RecordType({"name": StringType, "age": IntType})
+        result = type_to_go(t)
+        assert 'Name string `json:"name"`' in result
+        assert 'Age int `json:"age"`' in result
+
+    def test_optional_fields(self):
+        t = RecordType({"name": NullableType(StringType)})
+        result = type_to_go(t)
+        assert 'Name *string `json:"name,omitempty"`' in result
 
 
 class TestExtractNamedTypes:
@@ -77,7 +121,7 @@ class TestExtractNamedTypes:
         assert extracted["Foo"].fields["x"] is StringType
 
     def test_nested_records(self):
-        inner = RecordType({"y": NumberType})
+        inner = RecordType({"y": IntType})
         outer = RecordType({"child": inner})
         extracted = {}
         extract_named_types(outer, ["Parent"], extracted)
@@ -86,7 +130,7 @@ class TestExtractNamedTypes:
 
     def test_dedup_names(self):
         t1 = RecordType({"x": StringType})
-        t2 = RecordType({"y": NumberType})
+        t2 = RecordType({"y": IntType})
         extracted = {}
         extract_named_types(t1, ["Foo"], extracted)
         extract_named_types(t2, ["Foo"], extracted)

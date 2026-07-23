@@ -9,3 +9,4 @@ class Config(argparse.Namespace):
     max_literals: int = 0
     max_key_length: int = 25
     max_literal_length: int = 100
+    output: str = "ts"

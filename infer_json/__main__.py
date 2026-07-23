@@ -11,7 +11,9 @@ from .cluster import (
     merge_clusters_by_discriminant,
 )
 from .config import Config
-from .emit import extract_named_types, snake_to_pascal, type_to_ts
+from .emit import extract_named_types, snake_to_pascal
+from .emit_go import type_to_go
+from .emit_ts import type_to_ts
 from .simplify import simplify_unions, widen_literals
 from .type_exprs import TypeExpr, UnionType
 
@@ -26,7 +28,7 @@ def _collect_objects(parsed: object, objects: List[dict]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="infer_json", description="Infer TypeScript types from JSON/JSONL files")
+    parser = argparse.ArgumentParser(prog="infer_json", description="Infer types from JSON/JSONL files")
     parser.add_argument("files", nargs="+", help="JSON or JSONL files to process")
     parser.add_argument(
         "--jsonl",
@@ -67,7 +69,18 @@ def main() -> None:
         default=100,
         help="String literals longer than this are widened to string (default 100, 0 to disable)",
     )
+    parser.add_argument(
+        "-o",
+        "--output",
+        choices=["ts", "go"],
+        default="ts",
+        help="Output language (default: ts)",
+    )
     args = parser.parse_args(namespace=Config())
+
+    if args.output == "go":
+        args.max_literals = 0
+        args.find_discriminant = False
 
     objects: List[dict] = []
     for filepath in args.files:
@@ -126,11 +139,16 @@ def main() -> None:
         assert extracted_top.kind == "ref"
         variant_names.append(extracted_top.name)
 
-    for type_name, type_expr in extracted.items():
-        print(f"type {type_name} = {type_to_ts(type_expr)};\n")
-
-    if not single_variant:
-        print(f"type Root = {' | '.join(variant_names)};")
+    if args.output == "go":
+        for type_name, type_expr in extracted.items():
+            print(f"type {type_name} {type_to_go(type_expr)}\n")
+        if not single_variant:
+            print(f"// Root is one of: {', '.join(variant_names)}")
+    else:
+        for type_name, type_expr in extracted.items():
+            print(f"type {type_name} = {type_to_ts(type_expr)};\n")
+        if not single_variant:
+            print(f"type Root = {' | '.join(variant_names)};")
 
 
 if __name__ == "__main__":

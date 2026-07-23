@@ -1,6 +1,6 @@
 # Infer JSON
 
-Tool to infer TypeScript types from JSON data. This is useful for exploring data where schemas don't exist or aren't public.
+Tool to infer type definitions from JSON data. This is useful for exploring data where schemas don't exist or aren't public. Currently supports TypeScript and Go.
 
 ## Examples
 
@@ -30,6 +30,22 @@ type Root = {
   completedAt: null;
   days: string[];
 };
+```
+
+And a similar struct definition for Go.
+
+```sh
+python -m infer_json examples/basic.jsonl --output go
+```
+
+```go
+type Root struct {
+	Name string `json:"name"`
+	Count int `json:"count"`
+	Ratio float64 `json:"ratio"`
+	CompletedAt any `json:"completedAt"`
+	Days []string `json:"days"`
+}
 ```
 
 ### Literal types
@@ -65,6 +81,17 @@ type Root = {
 
 This means that up to 2 distinct values for the key `"foo"` are kept as literals before falling back to `string`.
 
+Go does not have any context of literals, so `--max-literals` is ignored and strings are always inferred as `string`
+
+```sh
+python -m infer_json examples/string-literals.jsonl --max-literals 2 --output go
+```
+
+```go
+type Root struct {
+	Foo string `json:"foo"`
+}
+```
 
 ### Discriminants
 
@@ -122,6 +149,8 @@ type Root = Dog | Cat;
 ```
 
 Notice that the discriminating key `"type"` is a literal type even though max literals was 0.
+
+Since Go does not have any literal types, it also does not have a discriminating key and so `--find-discriminant` is also ignored for go output.
 
 ### Nested Objects
 
@@ -210,6 +239,4 @@ This means objects with at least 3 shared keys should be merged.
 
 ## Background
 
-This project grew out of a script I wrote for generating Go structs from JSON API responses. I ran into a similar issue on a TypeScript project and realized this could be a useful project.
-
-This is actually a lot harder in TS because of the flexibility of the type system. Possible future work is supporting output in multiple languages. But that would be a pretty big change to the inference logic.
+This project grew out of a script I wrote for generating Go structs from JSON API responses. I ran into a similar issue on a TypeScript project and realized this could be a useful project. 

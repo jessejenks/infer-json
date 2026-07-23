@@ -3,11 +3,12 @@ from infer_json.infer import _has_data_keys, infer_type
 from infer_json.merge import merge, merge_records
 from infer_json.type_exprs import (
     BoolType,
+    FloatType,
+    IntType,
     ListType,
     MapType,
     Null,
     NullableType,
-    NumberType,
     RecordType,
     StringLiteralType,
     StringType,
@@ -18,7 +19,7 @@ from infer_json.type_exprs import (
 class TestMerge:
     def test_unknown_is_identity(self):
         assert merge(Unknown, StringType) is StringType
-        assert merge(NumberType, Unknown) is NumberType
+        assert merge(FloatType, Unknown) is FloatType
         assert merge(Unknown, Unknown) is Unknown
 
     def test_null_makes_nullable(self):
@@ -34,7 +35,7 @@ class TestMerge:
         assert merge(StringType, StringType) is StringType
 
     def test_different_atoms_become_union(self):
-        result = merge(StringType, NumberType)
+        result = merge(StringType, IntType)
         assert result.kind == "union"
         assert len(result.members) == 2
 
@@ -55,13 +56,13 @@ class TestMerge:
 
     def test_list_merge(self):
         a = ListType(StringType)
-        b = ListType(NumberType)
+        b = ListType(IntType)
         result = merge(a, b)
         assert result.kind == "list"
         assert result.element_type.kind == "union"
 
     def test_record_merge_shared_keys(self):
-        a = RecordType({"x": StringType, "y": NumberType})
+        a = RecordType({"x": StringType, "y": IntType})
         b = RecordType({"x": StringType, "z": BoolType})
         result = merge_records(a, b)
         assert "x" in result.fields
@@ -70,7 +71,7 @@ class TestMerge:
 
     def test_map_merge(self):
         a = MapType(StringType)
-        b = MapType(NumberType)
+        b = MapType(IntType)
         result = merge(a, b)
         assert result.kind == "map"
         assert result.value_type.kind == "union"
@@ -81,8 +82,8 @@ class TestInferType:
         config = Config()
         assert infer_type(None, config) is Null
         assert infer_type(True, config) is BoolType
-        assert infer_type(42, config) is NumberType
-        assert infer_type(3.14, config) is NumberType
+        assert infer_type(42, config) is IntType
+        assert infer_type(3.14, config) is FloatType
         assert infer_type("hi", config) == StringLiteralType("hi")
 
     def test_empty_list(self):
@@ -93,12 +94,12 @@ class TestInferType:
     def test_dict_becomes_record(self):
         result = infer_type({"a": 1, "b": "x"}, Config())
         assert result.kind == "record"
-        assert result.fields["a"] is NumberType
+        assert result.fields["a"] is IntType
 
     def test_data_keys_become_map(self):
         result = infer_type({"src/foo.ts": 1, "src/bar.ts": 2}, Config())
         assert result.kind == "map"
-        assert result.value_type is NumberType
+        assert result.value_type is IntType
 
     def test_long_keys_become_map(self):
         result = infer_type({"a_very_long_key_name_that_exceeds": 1}, Config(max_key_length=10))
