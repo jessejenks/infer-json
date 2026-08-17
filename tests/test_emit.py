@@ -156,6 +156,6 @@ class TestCluster:
             {"type": "a", "x": 2},
             {"type": "b", "y": "hi"},
         ]
-        clusters = cluster_objects(objects, config)
+        clusters, _ = cluster_objects(objects, config)
         disc = find_discriminant_key(clusters)
         assert disc == "type"

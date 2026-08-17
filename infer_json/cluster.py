@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, List, Set
+from typing import Dict, FrozenSet, List, Set, Tuple
 
 from .config import Config
 from .infer import infer_type
-from .merge import merge_records
-from .type_exprs import RecordType
+from .merge import merge, merge_records
+from .type_exprs import MapType, RecordType, TypeExpr
 
 
 @dataclass
@@ -17,34 +17,41 @@ class Cluster:
     constant_string_keys: Dict[str, str] = field(default_factory=dict)
 
 
-def cluster_objects(objects: List[dict], config: Config) -> List[Cluster]:
+def cluster_objects(objects: List[dict], config: Config) -> Tuple[List[Cluster], MapType | None]:
     keyset_to_cluster: Dict[FrozenSet[str], Cluster] = {}
+    map_value: TypeExpr | None = None
 
     for obj in objects:
-        ks = frozenset(obj.keys())
         inferred = infer_type(obj, config)
-        assert inferred.kind == "record"
+        if inferred.kind == "record":
+            ks = frozenset(obj.keys())
+            if ks not in keyset_to_cluster:
+                keyset_to_cluster[ks] = Cluster(
+                    key_set=ks,
+                    merged_type=inferred,
+                    count=1,
+                    constant_string_keys={k: v for k, v in obj.items() if isinstance(v, str)},
+                )
+            else:
+                cluster = keyset_to_cluster[ks]
+                cluster.merged_type = merge_records(cluster.merged_type, inferred)
+                cluster.count += 1
 
-        if ks not in keyset_to_cluster:
-            keyset_to_cluster[ks] = Cluster(
-                key_set=ks,
-                merged_type=inferred,
-                count=1,
-                constant_string_keys={k: v for k, v in obj.items() if isinstance(v, str)},
-            )
+                drop = []
+                for k, v in cluster.constant_string_keys.items():
+                    if k not in obj or obj[k] != v:
+                        drop.append(k)
+                for k in drop:
+                    del cluster.constant_string_keys[k]
+        elif inferred.kind == "map":
+            if map_value is None:
+                map_value = inferred.value_type
+            else:
+                map_value = merge(map_value, inferred.value_type)
         else:
-            cluster = keyset_to_cluster[ks]
-            cluster.merged_type = merge_records(cluster.merged_type, inferred)
-            cluster.count += 1
+            raise Exception("Expected top-level objects")
 
-            drop = []
-            for k, v in cluster.constant_string_keys.items():
-                if k not in obj or obj[k] != v:
-                    drop.append(k)
-            for k in drop:
-                del cluster.constant_string_keys[k]
-
-    return list(keyset_to_cluster.values())
+    return list(keyset_to_cluster.values()), (None if map_value is None else MapType(map_value))
 
 
 def find_discriminant_key(clusters: List[Cluster]) -> str | None:
