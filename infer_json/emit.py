@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Dict, List
 
 from .type_exprs import (
@@ -14,7 +15,8 @@ from .type_exprs import (
 
 
 def snake_to_pascal(s: str) -> str:
-    return "".join(w[0].upper() + w[1:] for w in s.replace("-", "_").split("_") if w)
+    normalized = re.sub(r"[^a-zA-Z0-9]", "_", s)
+    return "".join(w[0].upper() + w[1:] for w in normalized.split("_") if w)
 
 
 def extract_named_types(
