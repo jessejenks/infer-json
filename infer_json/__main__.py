@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from typing import Dict, List
 
@@ -25,6 +26,35 @@ def _collect_objects(parsed: object, objects: List[dict]) -> None:
                 objects.append(item)
     elif isinstance(parsed, dict):
         objects.append(parsed)
+
+
+COMMENT_PATTERN = re.compile(r"//")
+
+
+def _count_trailing_backslashes(s: str, pos: int) -> int:
+    count = 0
+    pos -= 1
+    while pos >= 0 and s[pos] == "\\":
+        count += 1
+        pos -= 1
+    return count
+
+
+def _remove_comments(line: str) -> str:
+    in_string = False
+    for i, c in enumerate(line):
+        if c == '"' and _count_trailing_backslashes(line, i) % 2 == 0:
+            in_string = not in_string
+        elif not in_string and line[i : i + 2] == "//":
+            return line[:i]
+    return line
+
+
+def _clean_line(line: str) -> str:
+    # remove jsonc style comments
+    if COMMENT_PATTERN.search(line):
+        return _remove_comments(line.strip())
+    return line.strip()
 
 
 def main() -> None:
@@ -88,12 +118,13 @@ def main() -> None:
         with open(filepath, "r") as f:
             if is_jsonl:
                 for line in f:
-                    line = line.strip()
+                    line = _clean_line(line)
                     if not line:
                         continue
                     _collect_objects(json.loads(line), objects)
             else:
-                _collect_objects(json.load(f), objects)
+                cleaned = "\n".join(cl for line in f if (cl := _clean_line(line)))
+                _collect_objects(json.loads(cleaned), objects)
 
     print(f"// Inferred from {len(objects)} objects across {len(args.files)} file(s)", file=sys.stderr)
 

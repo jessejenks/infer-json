@@ -1,0 +1,6 @@
+{// comments
+    // comments
+    "foo": "bar // baz\\\" quote",// escapes
+    "path": "C:\\\\"// trailing backslash
+    // comments
+}//
