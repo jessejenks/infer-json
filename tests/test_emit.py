@@ -32,75 +32,75 @@ class TestSnakeToPascal:
 
 class TestTypeToTs:
     def test_primitives(self):
-        assert type_to_ts(Unknown) == "unknown"
-        assert type_to_ts(Null) == "null"
-        assert type_to_ts(StringType) == "string"
-        assert type_to_ts(IntType) == "number"
-        assert type_to_ts(FloatType) == "number"
-        assert type_to_ts(BoolType) == "boolean"
+        assert type_to_ts(Unknown, Config()) == "unknown"
+        assert type_to_ts(Null, Config()) == "null"
+        assert type_to_ts(StringType, Config()) == "string"
+        assert type_to_ts(IntType, Config()) == "number"
+        assert type_to_ts(FloatType, Config()) == "number"
+        assert type_to_ts(BoolType, Config()) == "boolean"
 
     def test_literal(self):
-        assert type_to_ts(StringLiteralType("foo")) == '"foo"'
+        assert type_to_ts(StringLiteralType("foo"), Config()) == '"foo"'
 
     def test_list(self):
-        assert type_to_ts(ListType(StringType)) == "string[]"
+        assert type_to_ts(ListType(StringType), Config()) == "string[]"
 
     def test_list_of_union_gets_parens(self):
         t = ListType(UnionType([StringType, IntType]))
-        assert type_to_ts(t) == "(string | number)[]"
+        assert type_to_ts(t, Config()) == "(string | number)[]"
 
     def test_map(self):
-        assert type_to_ts(MapType(StringType)) == "Record<string, string>"
+        assert type_to_ts(MapType(StringType), Config()) == "Record<string, string>"
 
     def test_ref(self):
-        assert type_to_ts(NamedRef("Foo")) == "Foo"
+        assert type_to_ts(NamedRef("Foo"), Config()) == "Foo"
 
     def test_record(self):
         t = RecordType({"name": (StringType, True), "age": (IntType, True)})
-        result = type_to_ts(t)
+        result = type_to_ts(t, Config())
         assert "name: string;" in result
         assert "age: number;" in result
 
     def test_optional_fields(self):
         t = RecordType({"name": (StringType, False)})
-        result = type_to_ts(t)
+        result = type_to_ts(t, Config())
         assert "name?: string;" in result
 
 
 class TestTypeToGo:
     def test_primitives(self):
-        assert type_to_go(Unknown) == "any"
-        assert type_to_go(Null) == "any"
-        assert type_to_go(StringType) == "string"
-        assert type_to_go(IntType) == "int"
-        assert type_to_go(FloatType) == "float64"
-        assert type_to_go(BoolType) == "bool"
+        assert type_to_go(Unknown, Config()) == "any"
+        assert type_to_go(Null, Config()) == "any"
+        assert type_to_go(StringType, Config()) == "string"
+        assert type_to_go(IntType, Config()) == "int"
+        assert type_to_go(FloatType, Config()) == "float64"
+        assert type_to_go(BoolType, Config()) == "bool"
 
     def test_literal(self):
-        assert type_to_go(StringLiteralType("foo")) == "string"
+        assert type_to_go(StringLiteralType("foo"), Config()) == "string"
 
     def test_list(self):
-        assert type_to_go(ListType(StringType)) == "[]string"
+        assert type_to_go(ListType(StringType), Config()) == "[]string"
 
     def test_list_of_union_gets_parens(self):
         t = ListType(UnionType([StringType, IntType]))
-        assert type_to_go(t) == "[]any"
+        assert type_to_go(t, Config()) == "[]any"
 
     def test_map(self):
-        assert type_to_go(MapType(StringType)) == "map[string]string"
+        assert type_to_go(MapType(StringType), Config()) == "map[string]string"
 
     def test_ref(self):
-        assert type_to_go(NamedRef("Foo")) == "Foo"
+        assert type_to_go(NamedRef("Foo"), Config()) == "Foo"
 
     def test_record(self):
         t = RecordType({"name": (StringType, True), "age": (IntType, True)})
-        result = type_to_go(t)
+        result = type_to_go(t, Config())
         assert 'Name string `json:"name"`' in result
         assert 'Age int `json:"age"`' in result
 
     def test_optional_fields(self):
         t = RecordType({"name": (StringType, False)})
-        result = type_to_go(t)
+        result = type_to_go(t, Config())
         assert 'Name *string `json:"name,omitempty"`' in result
 
 
@@ -142,8 +142,69 @@ class TestExtractNamedTypes:
         assert "RootData" in extracted
 
 
+class TestSortKeys:
+    def test_ts_sorted(self):
+        t = RecordType({"zebra": (IntType, True), "alpha": (StringType, True)})
+        result = type_to_ts(t, Config(sort_keys=True))
+        assert result.index("alpha") < result.index("zebra")
+
+    def test_ts_unsorted(self):
+        t = RecordType({"zebra": (IntType, True), "alpha": (StringType, True)})
+        result = type_to_ts(t, Config())
+        assert result.index("zebra") < result.index("alpha")
+
+    def test_go_sorted(self):
+        t = RecordType({"zebra": (IntType, True), "alpha": (StringType, True)})
+        result = type_to_go(t, Config(sort_keys=True))
+        assert result.index("Alpha") < result.index("Zebra")
+
+
+class TestReadonly:
+    def test_readonly_fields(self):
+        t = RecordType({"name": (StringType, True)})
+        result = type_to_ts(t, Config(readonly=True))
+        assert "readonly name: string;" in result
+
+    def test_readonly_optional(self):
+        t = RecordType({"name": (StringType, False)})
+        result = type_to_ts(t, Config(readonly=True))
+        assert "readonly name?: string;" in result
+
+    def test_no_readonly(self):
+        t = RecordType({"name": (StringType, True)})
+        result = type_to_ts(t, Config())
+        assert "readonly" not in result
+
+
+class TestIndentation:
+    def test_tabs(self):
+        t = RecordType({"name": (StringType, True)})
+        result = type_to_ts(t, Config())
+        assert "\tname: string;" in result
+
+    def test_spaces(self):
+        t = RecordType({"name": (StringType, True)})
+        result = type_to_ts(t, Config(use_spaces=True))
+        assert "  name: string;" in result
+
+    def test_four_spaces(self):
+        t = RecordType({"name": (StringType, True)})
+        result = type_to_ts(t, Config(use_spaces=True, tab_width=4))
+        assert "    name: string;" in result
+
+    def test_go_tabs(self):
+        t = RecordType({"name": (StringType, True)})
+        result = type_to_go(t, Config())
+        assert "\tName" in result
+
+    def test_go_spaces(self):
+        t = RecordType({"name": (StringType, True)})
+        result = type_to_go(t, Config(use_spaces=True, tab_width=4))
+        assert "    Name" in result
+
+
 class TestPrepareVariants:
-    def test_default_variant_names(self):
+    def test_variant_names(self):
         named_types: list[tuple[str | None, TypeExpr]] = [
             (None, RecordType({"x": (IntType, True)})),
             (None, RecordType({"y": (StringType, True)})),
