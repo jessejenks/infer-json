@@ -19,7 +19,7 @@ class TestDefaultConfig:
         named_types = run_pipeline([{"foo": "bar", "count": 1, "pi": 3.14, "done": None}], Config())
         assert named_types == [
             (
-                "Root",
+                None,
                 RecordType(
                     {
                         "foo": (StringType, True),
@@ -35,7 +35,7 @@ class TestDefaultConfig:
         named_types = run_pipeline([{"key": [{"foo": "bar", "count": 1, "pi": 3.14, "done": None}]}], Config())
         assert named_types == [
             (
-                "Root",
+                None,
                 RecordType(
                     {
                         "key": (
@@ -64,11 +64,11 @@ class TestDefaultConfig:
             ],
             Config(),
         )
-        assert named_types == [("Root", RecordType({"foo": (UnionType([StringType, Null]), True)}))]
+        assert named_types == [(None, RecordType({"foo": (UnionType([StringType, Null]), True)}))]
 
     def test_nested_records_preserved(self):
         named_types = run_pipeline([{"outer": {"inner": 1}}], Config())
-        assert named_types == [("Root", RecordType({"outer": (RecordType({"inner": (IntType, True)}), True)}))]
+        assert named_types == [(None, RecordType({"outer": (RecordType({"inner": (IntType, True)}), True)}))]
 
     def test_literals_widened_by_default(self):
         named_types = run_pipeline(
@@ -78,7 +78,7 @@ class TestDefaultConfig:
             ],
             Config(),
         )
-        assert named_types == [("Root", RecordType({"status": (StringType, True)}))]
+        assert named_types == [(None, RecordType({"status": (StringType, True)}))]
 
 
 class TestLiterals:
@@ -116,7 +116,7 @@ class TestMapAndRecordInteraction:
             ],
             Config(max_key_length=1),
         )
-        assert named_types == [("Root", MapType(StringType))]
+        assert named_types == [(None, MapType(StringType))]
 
     def test_map_values_deduped(self):
         named_types = run_pipeline(
@@ -126,14 +126,14 @@ class TestMapAndRecordInteraction:
             ],
             Config(),
         )
-        assert named_types == [("Root", MapType(BoolType))]
+        assert named_types == [(None, MapType(BoolType))]
 
     def test_map_literals_widened(self):
         named_types = run_pipeline(
             [{"very-long-key-that-is-a-map": "cffc1d89-62da-4a08-89e2-e13d85e908a7"}],
             Config(max_literal_length=10),
         )
-        assert named_types == [("Root", MapType(StringType))]
+        assert named_types == [(None, MapType(StringType))]
 
     def test_mixed_without_flatten_keeps_both_variants(self):
         named_types = run_pipeline(
@@ -155,7 +155,7 @@ class TestMapAndRecordInteraction:
             ],
             Config(flatten_maps=True),
         )
-        assert named_types == [("Root", MapType(UnionType([BoolType, StringType])))]
+        assert named_types == [(None, MapType(UnionType([BoolType, StringType])))]
 
     def test_flatten_deduplicates_value_types(self):
         named_types = run_pipeline(
@@ -165,7 +165,7 @@ class TestMapAndRecordInteraction:
             ],
             Config(flatten_maps=True),
         )
-        assert named_types == [("Root", MapType(BoolType))]
+        assert named_types == [(None, MapType(BoolType))]
 
 
 class TestDiscriminant:
@@ -221,7 +221,7 @@ class TestDiscriminant:
 class TestNaming:
     def test_single_variant_is_root(self):
         named_types = run_pipeline([{"foo": 1}], Config())
-        assert named_types[0][0] == "Root"
+        assert named_types[0][0] is None
 
     def test_multiple_variants_are_numbered(self):
         named_types = run_pipeline(
@@ -251,7 +251,11 @@ class TestNaming:
             [{"very-long-key-that-is-a-map": 42}],
             Config(),
         )
-        assert named_types[0][0] == "Root"
+        assert named_types[0][0] is None
+
+    def test_custom_root_name(self):
+        named_types = run_pipeline([{"foo": 1}], Config(root="Api"))
+        assert named_types[0][0] == None
 
 
 class TestDiscriminantDiscovery:
@@ -270,7 +274,7 @@ class TestTopLevelLists:
             Config(),
         )
         assert len(named_types) == 1
-        assert named_types[0][0] == "Root"
+        assert named_types[0][0] is None
         root = named_types[0][1]
         assert root.kind == "list"
         assert root.element_type == RecordType({"foo": (StringType, True)})

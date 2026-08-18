@@ -76,7 +76,7 @@ def main() -> None:
     print(f"// Inferred from {len(items)} items across {len(args.files)} file(s)", file=sys.stderr)
 
     named_types = run_pipeline(items, args)
-    extracted, variants = prepare_variants(named_types)
+    extracted, variants = prepare_variants(named_types, args)
 
     if args.output == "go":
         emit = type_to_go
@@ -84,18 +84,18 @@ def main() -> None:
             print(f"type {type_name} {emit(type_expr)}\n")
         variant_names = [emit(v) for v in variants]
         if len(variants) > 1:
-            print(f"// Root is one of: {', '.join(variant_names)}")
+            print(f"// {args.root} is one of: {', '.join(variant_names)}")
         elif variant_names[0] not in extracted:
-            print(f"// Root is {variant_names[0]}")
+            print(f"// {args.root} is {variant_names[0]}")
     else:
         emit = type_to_ts
         for type_name, type_expr in extracted.items():
             print(f"type {type_name} = {emit(type_expr)};\n")
         variant_names = [emit(v) for v in variants]
         if len(variants) > 1:
-            print(f"type Root = {' | '.join(variant_names)};")
+            print(f"type {args.root} = {' | '.join(variant_names)};")
         elif variant_names[0] not in extracted:
-            print(f"type Root = {variant_names[0]};")
+            print(f"type {args.root} = {variant_names[0]};")
 
 
 if __name__ == "__main__":

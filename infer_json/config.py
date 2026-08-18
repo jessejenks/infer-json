@@ -1,5 +1,6 @@
 import argparse
 from dataclasses import dataclass, field
+from typing import Literal
 
 
 @dataclass
@@ -11,11 +12,16 @@ class Config(argparse.Namespace):
     max_key_length: int = 25
     max_literal_length: int = 100
     flatten_maps: bool = False
-    output: str = "ts"
+    root: str = "Root"
+    prefix: str = ""
+    variant: str = "Variant"
+    output: Literal["ts", "go"] = "ts"
 
     @staticmethod
     def attach_arguments(parser: argparse.ArgumentParser):
-        parser.add_argument("files", nargs="*", help="JSON or JSONL files to process (reads stdin if none given, or use - for stdin)")
+        parser.add_argument(
+            "files", nargs="*", help="JSON or JSONL files to process (reads stdin if none given, or use - for stdin)"
+        )
         parser.add_argument(
             "--jsonl",
             action="store_true",
@@ -56,6 +62,20 @@ class Config(argparse.Namespace):
             "--flatten-maps",
             action="store_true",
             help="A top-level map causes all top-level objects to become a map (default false)",
+        )
+        parser.add_argument(
+            "-r",
+            "--root",
+            help="Root type name (default 'Root')",
+        )
+        parser.add_argument(
+            "-p",
+            "--prefix",
+            help="Global prefix for type names (default '')",
+        )
+        parser.add_argument(
+            "--variant",
+            help="Name prefix used for anonymous types (default 'Variant')",
         )
         parser.add_argument(
             "-o",

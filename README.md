@@ -409,6 +409,122 @@ The tool accepts multiple files and merges all objects into a single type.
 
 The tool supports JSONC files (JSON with comments). Files with the `.jsonc` extension are parsed with comments stripped automatically.
 
+### Naming Options
+
+By default, the root type is called `Root`, anonymous variants are numbered `Variant0`, `Variant1`, etc., and discriminant-derived names like `Dog` or `Cat` are used as-is. These can be customized with three independent flags.
+
+Note that no validation is done on the provided names, so make sure the result is a valid identifier in the target language.
+
+#### `--root`
+
+The `-r` or `--root` flag changes the root type name.
+
+```sh
+infer-json examples/discriminating.jsonl --find-discriminant --root Animal
+```
+
+```ts
+type Dog = {
+  type: "dog";
+  bark: boolean;
+};
+
+type Cat = {
+  type: "cat";
+  purr?: boolean;
+  lives?: number;
+};
+
+type Animal = Dog | Cat;
+```
+
+#### `--prefix`
+
+The `-p` or `--prefix` flag prepends a string to all generated type names other than the root.
+
+```sh
+infer-json examples/discriminating.jsonl --find-discriminant --root Animal --prefix My
+```
+
+```ts
+type MyDog = {
+  type: "dog";
+  bark: boolean;
+};
+
+type MyCat = {
+  type: "cat";
+  purr?: boolean;
+  lives?: number;
+};
+
+type Animal = MyDog | MyCat;
+```
+
+#### `--variant`
+
+The `--variant` flag changes the word used for anonymous variant types (default `Variant`).
+
+```sh
+infer-json examples/merge-objects.jsonl --root Api --variant Case
+```
+
+```ts
+type Case0 = {
+  key1: number;
+  key2: number;
+  key3: number;
+};
+
+type Case1 = {
+  key1: number;
+  key2: number;
+  key3: number;
+  key4: number;
+};
+
+type Case2 = {
+  key1: number;
+  key2: number;
+  key3: number;
+  key5: number;
+};
+
+type Api = Case0 | Case1 | Case2;
+```
+
+These flags can be combined. For example, `--prefix Response --variant Case` produces `ResponseCase0`, `ResponseCase1`, etc.
+
+All naming flags work with Go output as well.
+
+```sh
+infer-json examples/merge-objects.jsonl --root Api --variant Case --output go
+```
+
+```go
+type Case0 struct {
+	Key1 int `json:"key1"`
+	Key2 int `json:"key2"`
+	Key3 int `json:"key3"`
+}
+
+type Case1 struct {
+	Key1 int `json:"key1"`
+	Key2 int `json:"key2"`
+	Key3 int `json:"key3"`
+	Key4 int `json:"key4"`
+}
+
+type Case2 struct {
+	Key1 int `json:"key1"`
+	Key2 int `json:"key2"`
+	Key3 int `json:"key3"`
+	Key5 int `json:"key5"`
+}
+
+// Api is one of: Case0, Case1, Case2
+```
+
 ### Other Options
 
 - `-L` or `--max-literal-length`: When using `--max-literals`, string literals longer than this are widened to `string`. This prevents long values like UUIDs or URLs from being kept as literals. Set to 0 to disable.

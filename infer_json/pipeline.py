@@ -34,8 +34,7 @@ def run_pipeline(items: list[object], config: Config) -> list[tuple[str | None, 
     else:
         variants = record_variants + other_variants
 
-    variants = _widen_and_simplify(variants, discriminant, config)
-    return _assign_names(variants)
+    return _widen_and_simplify(variants, discriminant, config)
 
 
 def _partition_records(types: list[TypeExpr]) -> tuple[list[RecordType], list[TypeExpr]]:
@@ -112,14 +111,6 @@ def _widen_and_simplify(
         return [(None, t) for t in members]
 
     return [(name, simplify_unions(t, config.min_shared_keys)) for name, t in widened]
-
-
-def _assign_names(variants: list[tuple[str | None, TypeExpr]]) -> list[tuple[str | None, TypeExpr]]:
-    if len(variants) == 1:
-        name = variants[0][0] or "Root"
-        return [(name, variants[0][1])]
-
-    return variants
 
 
 def _find_discriminant(groups: list[RecordType]) -> str | None:
