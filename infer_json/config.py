@@ -1,11 +1,10 @@
 import argparse
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
 class Config(argparse.Namespace):
-    files: List[str] = field(default_factory=list)
+    files: list[str] = field(default_factory=list)
     find_discriminant: bool = False
     min_shared_keys: int = 0
     max_literals: int = 0
@@ -44,7 +43,7 @@ class Config(argparse.Namespace):
             "-K",
             "--max-key-length",
             type=int,
-            help="Keys longer than this are treated as data; the dict becomes Record<string, T> (default 25, 0 to disable)",
+            help="Keys longer than this turn the object into a map type (default 25, 0 to disable)",
         )
         parser.add_argument(
             "-L",

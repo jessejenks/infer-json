@@ -1,0 +1,4 @@
+[
+    {"foo": "top-level-list"},
+    {"foo": "bar", "bar": "baz"}
+]

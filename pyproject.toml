@@ -1,7 +1,7 @@
 [project]
 name = "infer-json"
-version = "0.1.0"
-description = "Infer TypeScript types from JSON/JSONL files"
+version = "0.2.0"
+description = "Infer TypeScript/Go types from JSON/JSONL files"
 requires-python = ">=3.12"
 
 [dependency-groups]
