@@ -27,7 +27,7 @@ def _looks_like_map_keys(keys: Any, max_key_length: int) -> bool:
     return False
 
 
-def infer_type(value: Any, config: Config) -> TypeExpr:
+def infer_type(value: Any, config: Config, depth: int = 0) -> TypeExpr:
     if value is None:
         return Null
     if isinstance(value, bool):
@@ -43,13 +43,15 @@ def infer_type(value: Any, config: Config) -> TypeExpr:
             return ListType(Unknown)
         elem_type: TypeExpr = Unknown
         for v in value:
-            elem_type = merge(elem_type, infer_type(v, config))
+            elem_type = merge(elem_type, infer_type(v, config, depth))
         return ListType(elem_type)
+    if config.max_depth > 0 and config.max_depth == depth:
+        return Unknown
     if isinstance(value, dict):
         if _looks_like_map_keys(value.keys(), config.max_key_length):
             val_type: TypeExpr = Unknown
             for v in value.values():
-                val_type = merge(val_type, infer_type(v, config))
+                val_type = merge(val_type, infer_type(v, config, depth + 1))
             return MapType(val_type)
-        return RecordType({k: (infer_type(v, config), True) for k, v in value.items()})
+        return RecordType({k: (infer_type(v, config, depth + 1), True) for k, v in value.items()})
     return Unknown

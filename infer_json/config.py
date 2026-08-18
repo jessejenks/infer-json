@@ -9,6 +9,7 @@ class Config(argparse.Namespace):
     find_discriminant: bool = False
     min_shared_keys: int = 0
     max_literals: int = 0
+    max_depth: int = 0
     max_key_length: int = 25
     max_literal_length: int = 100
     flatten_maps: bool = False
@@ -41,13 +42,19 @@ class Config(argparse.Namespace):
             "-k",
             "--min-shared-keys",
             type=int,
-            help="Min shared keys to merge similar record types in unions (default 0)",
+            help="Minimum shared keys required to merge similar record types in unions (default 0)",
         )
         parser.add_argument(
             "-l",
             "--max-literals",
             type=int,
             help="Max distinct string literals before widening to string (default 0)",
+        )
+        parser.add_argument(
+            "-D",
+            "--max-depth",
+            type=int,
+            help="Maximum depth of type before collapsing to unknown/any (default 0, meaning no maximum)",
         )
         parser.add_argument(
             "-K",
