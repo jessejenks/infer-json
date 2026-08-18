@@ -2,11 +2,27 @@
 
 Tool to infer type definitions from JSON data. This is useful for exploring data where schemas don't exist or aren't public. Currently supports TypeScript and Go.
 
+## Installation
+
+Install with `uv tool` or `pipx`
+
+```sh
+uv tool install git+https://github.com/jessejenks/infer-json.git
+pipx install git+https://github.com/jessejenks/infer-json.git
+```
+
+Or clone locally and run with
+
+```sh
+uv run -m infer_json ...
+python -m infer_json ...
+```
+
 ## Examples
 
 ### Basic
 
-For a simple JSON object, this tool produces a the same or similar type as the one TypeScript would infer.
+For a simple JSON object, this tool produces the same or similar type as the one TypeScript would infer.
 
 ```json
 {
@@ -19,7 +35,7 @@ For a simple JSON object, this tool produces a the same or similar type as the o
 ```
 
 ```sh
-python -m infer_json examples/basic.json
+infer-json examples/basic.json
 ```
 
 ```ts
@@ -35,7 +51,7 @@ type Root = {
 And a similar struct definition for Go.
 
 ```sh
-python -m infer_json examples/basic.jsonl --output go
+infer-json examples/basic.jsonl --output go
 ```
 
 ```go
@@ -58,7 +74,7 @@ By default, the tool does not try to infer literal types, instead treating all s
 ```
 
 ```sh
-python -m infer_json examples/string-literals.jsonl
+infer-json examples/string-literals.jsonl
 ```
 
 ```ts
@@ -70,7 +86,7 @@ type Root = {
 This can be controlled with `--max-literals` flag. Note that this *only* applies to strings, not numbers.
 
 ```sh
-python -m infer_json examples/string-literals.jsonl --max-literals 2
+infer-json examples/string-literals.jsonl --max-literals 2
 ```
 
 ```ts
@@ -84,7 +100,7 @@ This means that up to 2 distinct values for the key `"foo"` are kept as literals
 Go does not have any context of literals, so `--max-literals` is ignored and strings are always inferred as `string`
 
 ```sh
-python -m infer_json examples/string-literals.jsonl --max-literals 2 --output go
+infer-json examples/string-literals.jsonl --max-literals 2 --output go
 ```
 
 ```go
@@ -105,7 +121,7 @@ The tool can also try to find a discriminating key for top-level objects.
 ```
 
 ```sh
-python -m infer_json examples/discriminating.jsonl
+infer-json examples/discriminating.jsonl
 ```
 
 ```ts
@@ -130,7 +146,7 @@ type Root = Variant0 | Variant1 | Variant2;
 By using the `-d` or `--find-discriminant` flag, we can get much nicer output.
 
 ```sh
-python -m infer_json examples/discriminating.jsonl --find-discriminant
+infer-json examples/discriminating.jsonl --find-discriminant
 ```
 
 ```ts
@@ -166,7 +182,7 @@ Nested objects are treated as separate types.
 ```
 
 ```sh
-python -m infer_json examples/nested.json
+infer-json examples/nested.json
 ```
 
 ```ts
@@ -183,7 +199,7 @@ type Root = {
 And for Go:
 
 ```sh
-python -m infer_json examples/nested.json --output go
+infer-json examples/nested.json --output go
 ```
 
 ```go
@@ -208,7 +224,7 @@ By default, objects are grouped by their keys. So only objects with the exact sa
 ```
 
 ```sh
-python -m infer_json examples/merge-objects.jsonl
+infer-json examples/merge-objects.jsonl
 ```
 
 ```ts
@@ -238,7 +254,7 @@ type Root = Variant0 | Variant1 | Variant2;
 And for Go:
 
 ```sh
-python -m infer_json examples/merge-objects.jsonl --output go
+infer-json examples/merge-objects.jsonl --output go
 ```
 
 ```go
@@ -268,7 +284,7 @@ type Variant2 struct {
 This can be controlled with the `-k` or `--min-shared-keys` option.
 
 ```sh
-python -m infer_json examples/merge-objects.jsonl --min-shared-keys 3
+infer-json examples/merge-objects.jsonl --min-shared-keys 3
 ```
 
 ```ts
@@ -284,7 +300,7 @@ type Root = {
 And for Go:
 
 ```sh
-python -m infer_json examples/merge-objects.jsonl --min-shared-keys 3 --output go
+infer-json examples/merge-objects.jsonl --min-shared-keys 3 --output go
 ```
 
 ```go
@@ -309,7 +325,7 @@ Objects with keys longer than a threshold are inferred as map types (`Record<str
 ```
 
 ```sh
-python -m infer_json examples/map.jsonl
+infer-json examples/map.jsonl
 ```
 
 ```ts
@@ -323,7 +339,7 @@ type Root = Variant0 | Record<string, boolean | string>;
 And for Go:
 
 ```sh
-python -m infer_json examples/map.jsonl --output go
+infer-json examples/map.jsonl --output go
 ```
 
 ```go
@@ -339,7 +355,7 @@ The `-K` or `--max-key-length` option controls this threshold. Setting it to 0 d
 With the `-F` or `--flatten-maps` flag, if any top-level object is detected as a map, all top-level objects are flattened into the map type.
 
 ```sh
-python -m infer_json examples/map.jsonl --flatten-maps
+infer-json examples/map.jsonl --flatten-maps
 ```
 
 ```ts
@@ -358,7 +374,7 @@ When the input is a JSON array rather than an object, the tool infers the item t
 ```
 
 ```sh
-python -m infer_json examples/list.json
+infer-json examples/list.json
 ```
 
 ```ts
@@ -373,7 +389,7 @@ type Root = RootItem[];
 And for Go:
 
 ```sh
-python -m infer_json examples/list.json --output go
+infer-json examples/list.json --output go
 ```
 
 ```go

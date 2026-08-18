@@ -13,8 +13,8 @@ wheels = [
 
 [[package]]
 name = "infer-json"
-version = "0.2.0"
-source = { virtual = "." }
+version = "1.0.0"
+source = { editable = "." }
 
 [package.dev-dependencies]
 dev = [
