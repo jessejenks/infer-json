@@ -1,6 +1,6 @@
 [project]
 name = "infer-json"
-version = "1.0.0"
+version = "1.1.0"
 description = "Infer TypeScript/Go types from JSON/JSONL files"
 requires-python = ">=3.12"
 
