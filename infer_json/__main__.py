@@ -79,19 +79,17 @@ def main() -> None:
     extracted, variants = prepare_variants(named_types, args)
 
     if args.output == "go":
-        emit = type_to_go
         for type_name, type_expr in extracted.items():
-            print(f"type {type_name} {emit(type_expr)}\n")
-        variant_names = [emit(v) for v in variants]
+            print(f"type {type_name} {type_to_go(type_expr, args)}\n")
+        variant_names = [type_to_go(v, args) for v in variants]
         if len(variants) > 1:
             print(f"// {args.root} is one of: {', '.join(variant_names)}")
         elif variant_names[0] not in extracted:
             print(f"// {args.root} is {variant_names[0]}")
     else:
-        emit = type_to_ts
         for type_name, type_expr in extracted.items():
-            print(f"type {type_name} = {emit(type_expr)};\n")
-        variant_names = [emit(v) for v in variants]
+            print(f"type {type_name} = {type_to_ts(type_expr, args)};\n")
+        variant_names = [type_to_ts(v, args) for v in variants]
         if len(variants) > 1:
             print(f"type {args.root} = {' | '.join(variant_names)};")
         elif variant_names[0] not in extracted:

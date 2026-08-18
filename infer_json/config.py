@@ -15,6 +15,10 @@ class Config(argparse.Namespace):
     root: str = "Root"
     prefix: str = ""
     variant: str = "Variant"
+    sort_keys: bool = False
+    readonly: bool = False
+    use_spaces: bool = False
+    tab_width: int = 2
     output: Literal["ts", "go"] = "ts"
 
     @staticmethod
@@ -62,6 +66,27 @@ class Config(argparse.Namespace):
             "--flatten-maps",
             action="store_true",
             help="A top-level map causes all top-level objects to become a map (default false)",
+        )
+        parser.add_argument(
+            "-s",
+            "--sort-keys",
+            action="store_true",
+            help="Sort object keys alphabetically in output",
+        )
+        parser.add_argument(
+            "--readonly",
+            action="store_true",
+            help="Emit readonly fields in TypeScript output (ignored for Go)",
+        )
+        parser.add_argument(
+            "--use-spaces",
+            action="store_true",
+            help="Use spaces for indentation instead of tabs",
+        )
+        parser.add_argument(
+            "--tab-width",
+            type=int,
+            help="Number of spaces per indentation level (default 2, only used with --use-spaces)",
         )
         parser.add_argument(
             "-r",

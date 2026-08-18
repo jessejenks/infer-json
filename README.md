@@ -529,6 +529,10 @@ type Case2 struct {
 
 - `-L` or `--max-literal-length`: When using `--max-literals`, string literals longer than this are widened to `string`. This prevents long values like UUIDs or URLs from being kept as literals. Set to 0 to disable.
 - `--jsonl`: Force all input files to be parsed as JSONL, regardless of file extension.
+- `-s` or `--sort-keys`: Sort object keys alphabetically in output.
+- `--readonly`: Emit `readonly` fields in TypeScript output. Ignored for Go.
+- `--use-spaces`: Use spaces for indentation instead of tabs.
+- `--tab-width`: Number of spaces per indentation level (default 2, only used with `--use-spaces`).
 
 ## Background
 
