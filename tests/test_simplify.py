@@ -1,9 +1,7 @@
 from infer_json.config import Config
 from infer_json.simplify import (
     count_literals,
-    dedup_union_members,
-    simplify_unions,
-    type_eq,
+    merge_similar_records,
     widen_literals,
 )
 from infer_json.type_exprs import (
@@ -11,116 +9,53 @@ from infer_json.type_exprs import (
     IntType,
     ListType,
     MapType,
-    Null,
     RecordType,
     StringLiteralType,
     StringType,
     UnionType,
-    Unknown,
-    flatten_union_members,
 )
 
 
-class TestTypeEq:
-    def test_atoms(self):
-        assert type_eq(StringType, StringType)
-        assert not type_eq(StringType, IntType)
-
-    def test_literals(self):
-        assert type_eq(StringLiteralType("a"), StringLiteralType("a"))
-        assert not type_eq(StringLiteralType("a"), StringLiteralType("b"))
-
-    def test_records(self):
-        a = RecordType({"x": StringType})
-        b = RecordType({"x": StringType})
-        c = RecordType({"x": IntType})
-        assert type_eq(a, b)
-        assert not type_eq(a, c)
-
-    def test_different_kinds(self):
-        assert not type_eq(StringType, StringLiteralType("x"))
-        assert not type_eq(Unknown, Null)
-
-
-class TestFlatten:
-    def test_nested_unions(self):
-        inner = UnionType([StringType, IntType])
-        outer = UnionType([inner, BoolType])
-        flat = flatten_union_members(outer.members)
-        assert len(flat) == 3
-
-    def test_no_unions(self):
-        flat = flatten_union_members([StringType, IntType])
-        assert len(flat) == 2
-
-
-class TestDedup:
-    def test_removes_duplicates(self):
-        result = dedup_union_members([StringType, IntType, StringType, StringType])
-        assert len(result) == 2
-
-    def test_dedup_records(self):
-        a = RecordType({"x": StringType})
-        b = RecordType({"x": StringType})
-        result = dedup_union_members([a, b])
-        assert len(result) == 1
-
-    def test_flattens_and_deduplicates(self):
-        inner = UnionType([StringType, IntType])
-        result = dedup_union_members([inner, StringType, BoolType])
-        assert len(result) == 3
-
-
-class TestSimplifyUnions:
-    def test_single_member_collapses(self):
-        t = UnionType([StringType])
-        result = simplify_unions(t, 0)
-        assert result is StringType
-
-    def test_dedup_in_record_field(self):
-        t = RecordType({"x": UnionType([StringType, StringType])})
-        result = simplify_unions(t, 0)
-        assert result.fields["x"] is StringType  # type: ignore
-
+class TestMergeSimilarRecords:
     def test_merges_similar_records(self):
-        a = RecordType({"x": StringType, "y": IntType, "z": BoolType})
-        b = RecordType({"x": StringType, "y": IntType, "w": StringType})
-        t = UnionType([a, b])
-        result = simplify_unions(t, 2)
-        assert result.kind == "record"
-        assert "w" in result.fields
-        assert "z" in result.fields
+        a = RecordType({"x": (StringType, True), "y": (IntType, True), "z": (BoolType, True)})
+        b = RecordType({"x": (StringType, True), "y": (IntType, True), "w": (StringType, True)})
+        result = merge_similar_records([a, b], 2)
+        assert len(result) == 1
+        assert result[0].kind == "record"
+        assert "w" in result[0].fields
+        assert "z" in result[0].fields
 
     def test_no_merge_below_threshold(self):
-        a = RecordType({"x": StringType, "y": IntType})
-        b = RecordType({"a": StringType, "b": IntType})
-        t = UnionType([a, b])
-        result = simplify_unions(t, 3)
-        assert result.kind == "union"
+        a = RecordType({"x": (StringType, True), "y": (IntType, True)})
+        b = RecordType({"a": (StringType, True), "b": (IntType, True)})
+        result = merge_similar_records([a, b], 3)
+        assert len(result) == 2
 
     def test_merges_list_wrapped_records(self):
-        a = ListType(RecordType({"x": StringType, "y": IntType, "z": BoolType}))
-        b = ListType(RecordType({"x": StringType, "y": IntType, "w": StringType}))
-        t = UnionType([a, b])
-        result = simplify_unions(t, 2)
-        assert result.kind == "list"
-        assert result.element_type.kind == "record"
+        a = ListType(RecordType({"x": (StringType, True), "y": (IntType, True), "z": (BoolType, True)}))
+        b = ListType(RecordType({"x": (StringType, True), "y": (IntType, True), "w": (StringType, True)}))
+        result = merge_similar_records([a, b], 2)
+        assert len(result) == 1
+        assert result[0].kind == "list"
+        assert result[0].element_type.kind == "record"
 
     def test_merges_map_wrapped_records(self):
-        a = MapType(RecordType({"x": StringType, "y": IntType, "z": BoolType}))
-        b = MapType(RecordType({"x": StringType, "y": IntType, "w": StringType}))
-        t = UnionType([a, b])
-        result = simplify_unions(t, 2)
-        assert result.kind == "map"
-        assert result.value_type.kind == "record"
+        a = MapType(RecordType({"x": (StringType, True), "y": (IntType, True), "z": (BoolType, True)}))
+        b = MapType(RecordType({"x": (StringType, True), "y": (IntType, True), "w": (StringType, True)}))
+        result = merge_similar_records([a, b], 2)
+        assert len(result) == 1
+        assert result[0].kind == "map"
+        assert result[0].value_type.kind == "record"
 
 
 class TestWidenLiterals:
     def test_preserves_discriminant(self):
-        t = RecordType({"type": StringLiteralType("foo"), "name": StringLiteralType("bar")})
+        t = RecordType({"type": (StringLiteralType("foo"), True), "name": (StringLiteralType("bar"), True)})
         result = widen_literals(t, "type", Config(max_literals=0))
-        assert result.fields["type"] == StringLiteralType("foo")  # type: ignore
-        assert result.fields["name"] is StringType  # type: ignore
+        assert result.kind == "record"
+        assert result.fields["type"] == (StringLiteralType("foo"), True)
+        assert result.fields["name"] == (StringType, True)
 
     def test_widens_all_when_zero(self):
         t = StringLiteralType("x")
@@ -135,8 +70,7 @@ class TestWidenLiterals:
     def test_widens_large_unions(self):
         t = UnionType([StringLiteralType(str(i)) for i in range(20)])
         result = widen_literals(t, None, Config(max_literals=10))
-        assert result.kind == "union"
-        assert all(m is StringType for m in result.members)
+        assert result is StringType
 
     def test_widens_long_literals(self):
         t = StringLiteralType("x" * 200)

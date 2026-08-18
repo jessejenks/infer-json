@@ -1,67 +1,168 @@
 import sys
-from typing import Dict, List, Tuple
+from functools import reduce
 
-from .cluster import (
-    cluster_objects,
-    find_discriminant_key,
-    merge_clusters_by_discriminant,
-)
 from .config import Config
-from .emit import snake_to_pascal
-from .merge import merge
+from .infer import infer_type
 from .simplify import simplify_unions, widen_literals
-from .type_exprs import MapType, TypeExpr, UnionType
+from .type_exprs import (
+    MapType,
+    RecordType,
+    TypeExpr,
+    UnionType,
+    merge,
+    merge_records,
+)
 
 
-def run_pipeline(objects: List[Dict], config: Config):
-    clusters, map_type = cluster_objects(objects, config)
-    named_types: List[Tuple[str, TypeExpr]] = []
+def run_pipeline(items: list[object], config: Config) -> list[tuple[str | None, TypeExpr]]:
+    inferred = [infer_type(item, config) for item in items]
+    records, other_types = _partition_records(inferred)
+    record_groups = _group_by_keyset(records)
+
     discriminant: str | None = None
-    if config.flatten_maps and map_type:
-        merged_value = map_type.value_type
-        for cluster in clusters:
-            for field_type in cluster.merged_type.fields.values():
-                merged_value = merge(merged_value, field_type)
-        widened = widen_literals(MapType(merged_value), None, config)
-        simplified = simplify_unions(widened, config.min_shared_keys)
-        named_types.append(("Root", simplified))
-    else:
-        if config.find_discriminant:
-            discriminant = find_discriminant_key(clusters)
-            if discriminant:
-                clusters = merge_clusters_by_discriminant(clusters, discriminant)
-                print(f'// Discriminant key: "{discriminant}"', file=sys.stderr)
-            else:
-                print("// No single discriminant key found", file=sys.stderr)
-
-        print(f"// {len(clusters)} variant(s)\n", file=sys.stderr)
-
-        widened_types: List[TypeExpr] = []
-        for cluster in clusters:
-            widened = widen_literals(cluster.merged_type, discriminant, config)
-            widened_types.append(widened)
-
-        if not discriminant and len(widened_types) > 1:
-            combined = simplify_unions(UnionType(widened_types), config.min_shared_keys)
-            if combined.kind == "union":
-                simplified_types = combined.members
-            else:
-                simplified_types = [combined]
+    if config.find_discriminant and len(record_groups) > 1:
+        discriminant = _find_discriminant(record_groups)
+        if discriminant:
+            print(f'// Discriminant key: "{discriminant}"', file=sys.stderr)
         else:
-            simplified_types = [simplify_unions(w, config.min_shared_keys) for w in widened_types]
+            print("// No single discriminant key found", file=sys.stderr)
+    record_variants = _name_record_variants(record_groups, discriminant)
+    other_variants: list[tuple[str | None, TypeExpr]] = [(None, t) for t in other_types]
 
-        for i, t in enumerate(simplified_types):
-            if discriminant:
-                label = clusters[i].constant_string_keys.get(discriminant, f"Variant{i}")
-                named_types.append((snake_to_pascal(label), t))
-            else:
-                named_types.append((f"Variant{i}", t))
-        if map_type:
-            widened_map = widen_literals(map_type, None, config)
-            simplified_map = simplify_unions(widened_map, config.min_shared_keys)
-            named_types.append((f"Variant{len(named_types)}", simplified_map))
+    if config.flatten_maps:
+        variants = _flatten_into_map(record_variants, other_variants)
+    else:
+        variants = record_variants + other_variants
 
-        if len(named_types) == 1 and not discriminant:
-            named_types[0] = ("Root", named_types[0][1])
+    variants = _widen_and_simplify(variants, discriminant, config)
+    return _assign_names(variants)
 
-    return named_types
+
+def _partition_records(types: list[TypeExpr]) -> tuple[list[RecordType], list[TypeExpr]]:
+    records: list[RecordType] = []
+    other: list[TypeExpr] = []
+    for t in types:
+        if t.kind == "record":
+            records.append(t)
+        else:
+            other.append(t)
+    return records, other
+
+
+def _group_by_keyset(records: list[RecordType]) -> list[RecordType]:
+    groups: dict[frozenset[str], RecordType] = {}
+    for record in records:
+        ks = frozenset(record.fields.keys())
+        if ks in groups:
+            groups[ks] = merge_records(groups[ks].fields, record.fields)
+        else:
+            groups[ks] = record
+    return list(groups.values())
+
+
+def _name_record_variants(groups: list[RecordType], discriminant: str | None) -> list[tuple[str | None, TypeExpr]]:
+    if discriminant:
+        groups = _regroup_by_discriminant(groups, discriminant)
+
+    print(f"// {len(groups)} variant(s)\n", file=sys.stderr)
+
+    named: list[tuple[str | None, TypeExpr]] = []
+    for group in groups:
+        disc_field = group.fields.get(discriminant) if discriminant else None
+        if disc_field is not None and disc_field[0].kind == "string_literal":
+            named.append((disc_field[0].value, group))
+        else:
+            named.append((None, group))
+    return named
+
+
+def _flatten_into_map(
+    record_variants: list[tuple[str | None, TypeExpr]],
+    other_variants: list[tuple[str | None, TypeExpr]],
+) -> list[tuple[str | None, TypeExpr]]:
+    map_values: list[TypeExpr] = []
+    non_map: list[tuple[str | None, TypeExpr]] = []
+
+    for name, t in other_variants:
+        if t.kind == "map":
+            map_values.append(t.value_type)
+        else:
+            non_map.append((name, t))
+
+    if not map_values:
+        return record_variants + other_variants
+
+    for _, t in record_variants:
+        if t.kind == "record":
+            map_values.extend(v[0] for v in t.fields.values())
+
+    flat_value = reduce(merge, map_values)
+    return [(None, MapType(flat_value))] + non_map
+
+
+def _widen_and_simplify(
+    variants: list[tuple[str | None, TypeExpr]], discriminant: str | None, config: Config
+) -> list[tuple[str | None, TypeExpr]]:
+    widened = [(name, widen_literals(t, discriminant, config)) for name, t in variants]
+
+    if not discriminant and len(widened) > 1:
+        types = [t for _, t in widened]
+        combined = simplify_unions(UnionType(types), config.min_shared_keys)
+        members = combined.members if combined.kind == "union" else [combined]
+        return [(None, t) for t in members]
+
+    return [(name, simplify_unions(t, config.min_shared_keys)) for name, t in widened]
+
+
+def _assign_names(variants: list[tuple[str | None, TypeExpr]]) -> list[tuple[str | None, TypeExpr]]:
+    if len(variants) == 1:
+        name = variants[0][0] or "Root"
+        return [(name, variants[0][1])]
+
+    return variants
+
+
+def _find_discriminant(groups: list[RecordType]) -> str | None:
+    all_keys: set[str] = set()
+    for group in groups:
+        for k, (v, _) in group.fields.items():
+            if v.kind == "string_literal":
+                all_keys.add(k)
+
+    best_key: str | None = None
+    best_distinct = 0
+
+    for key in all_keys:
+        values: list[str] = []
+        for group in groups:
+            field = group.fields.get(key)
+            if field is not None and field[0].kind == "string_literal":
+                values.append(field[0].value)
+
+        if len(values) < 2:
+            continue
+
+        distinct = len(set(values))
+        if distinct > best_distinct:
+            best_distinct = distinct
+            best_key = key
+
+    return best_key
+
+
+def _regroup_by_discriminant(groups: list[RecordType], discriminant: str) -> list[RecordType]:
+    by_value: dict[str, RecordType] = {}
+    untagged: list[RecordType] = []
+
+    for group in groups:
+        field = group.fields.get(discriminant)
+        if field is None or field[0].kind != "string_literal":
+            untagged.append(group)
+            continue
+        val = field[0].value
+        if val in by_value:
+            by_value[val] = merge_records(by_value[val].fields, group.fields)
+        else:
+            by_value[val] = group
+
+    return list(by_value.values()) + untagged

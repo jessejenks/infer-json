@@ -4,24 +4,12 @@ import argparse
 import json
 import re
 import sys
-from typing import Dict, List
 
 from .config import Config
-from .emit import extract_named_types
+from .emit import prepare_variants
 from .emit_go import type_to_go
 from .emit_ts import type_to_ts
 from .pipeline import run_pipeline
-from .type_exprs import TypeExpr
-
-
-def _collect_objects(parsed: object, objects: List[dict]) -> None:
-    if isinstance(parsed, list):
-        for item in parsed:
-            if isinstance(item, dict):
-                objects.append(item)
-    elif isinstance(parsed, dict):
-        objects.append(parsed)
-
 
 COMMENT_PATTERN = re.compile(r"//")
 
@@ -61,7 +49,7 @@ def main() -> None:
         args.max_literals = 0
         args.find_discriminant = False
 
-    objects: List[dict] = []
+    items: list[object] = []
     for filepath in args.files:
         is_jsonl = args.jsonl or filepath.endswith(".jsonl")
         with open(filepath, "r") as f:
@@ -70,38 +58,34 @@ def main() -> None:
                     line = _clean_line(line)
                     if not line:
                         continue
-                    _collect_objects(json.loads(line), objects)
+                    items.append(json.loads(line))
             else:
                 cleaned = "\n".join(cl for line in f if (cl := _clean_line(line)))
-                _collect_objects(json.loads(cleaned), objects)
+                items.append(json.loads(cleaned))
 
-    print(f"// Inferred from {len(objects)} objects across {len(args.files)} file(s)", file=sys.stderr)
+    print(f"// Inferred from {len(items)} items across {len(args.files)} file(s)", file=sys.stderr)
 
-    named_types = run_pipeline(objects, args)
-
-    extracted: Dict[str, TypeExpr] = {}
-    variant_names: List[str] = []
-    single_variant = len(named_types) == 1
-
-    for name, simplified in named_types:
-        extracted_top = extract_named_types(simplified, [name], extracted)
-        match extracted_top.kind:
-            case "ref":
-                variant_names.append(extracted_top.name)
-            case _:
-                extracted[name] = extracted_top
-                variant_names.append(name)
+    named_types = run_pipeline(items, args)
+    extracted, variants = prepare_variants(named_types)
 
     if args.output == "go":
+        emit = type_to_go
         for type_name, type_expr in extracted.items():
-            print(f"type {type_name} {type_to_go(type_expr)}\n")
-        if not single_variant:
+            print(f"type {type_name} {emit(type_expr)}\n")
+        variant_names = [emit(v) for v in variants]
+        if len(variants) > 1:
             print(f"// Root is one of: {', '.join(variant_names)}")
+        elif variant_names[0] not in extracted:
+            print(f"// Root is {variant_names[0]}")
     else:
+        emit = type_to_ts
         for type_name, type_expr in extracted.items():
-            print(f"type {type_name} = {type_to_ts(type_expr)};\n")
-        if not single_variant:
+            print(f"type {type_name} = {emit(type_expr)};\n")
+        variant_names = [emit(v) for v in variants]
+        if len(variants) > 1:
             print(f"type Root = {' | '.join(variant_names)};")
+        elif variant_names[0] not in extracted:
+            print(f"type Root = {variant_names[0]};")
 
 
 if __name__ == "__main__":

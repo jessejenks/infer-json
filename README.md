@@ -19,7 +19,7 @@ For a simple JSON object, this tool produces a the same or similar type as the o
 ```
 
 ```sh
-python -m infer_json examples/basic.jsonl
+python -m infer_json examples/basic.json
 ```
 
 ```ts
@@ -180,6 +180,23 @@ type Root = {
 };
 ```
 
+And for Go:
+
+```sh
+python -m infer_json examples/nested.json --output go
+```
+
+```go
+type RootNested struct {
+	Bar int `json:"bar"`
+}
+
+type Root struct {
+	Foo string `json:"foo"`
+	Nested RootNested `json:"nested"`
+}
+```
+
 ### Merging Objects
 
 By default, objects are grouped by their keys. So only objects with the exact same keys can be considered the same type.
@@ -218,6 +235,36 @@ type Variant2 = {
 type Root = Variant0 | Variant1 | Variant2;
 ```
 
+And for Go:
+
+```sh
+python -m infer_json examples/merge-objects.jsonl --output go
+```
+
+```go
+type Variant0 struct {
+	Key1 int `json:"key1"`
+	Key2 int `json:"key2"`
+	Key3 int `json:"key3"`
+}
+
+type Variant1 struct {
+	Key1 int `json:"key1"`
+	Key2 int `json:"key2"`
+	Key3 int `json:"key3"`
+	Key4 int `json:"key4"`
+}
+
+type Variant2 struct {
+	Key1 int `json:"key1"`
+	Key2 int `json:"key2"`
+	Key3 int `json:"key3"`
+	Key5 int `json:"key5"`
+}
+
+// Root is one of: Variant0, Variant1, Variant2
+```
+
 This can be controlled with the `-k` or `--min-shared-keys` option.
 
 ```sh
@@ -234,9 +281,125 @@ type Root = {
 };
 ```
 
+And for Go:
+
+```sh
+python -m infer_json examples/merge-objects.jsonl --min-shared-keys 3 --output go
+```
+
+```go
+type Root struct {
+	Key1 int `json:"key1"`
+	Key2 int `json:"key2"`
+	Key3 int `json:"key3"`
+	Key4 *int `json:"key4,omitempty"`
+	Key5 *int `json:"key5,omitempty"`
+}
+```
+
 This means objects with at least 3 shared keys should be merged.
 
+### Map Types
+
+Objects with keys longer than a threshold are inferred as map types (`Record<string, T>` in TypeScript, `map[string]T` in Go).
+
+```jsonl
+{"enable": true, "very-long-key-that-turns-this-into-a-map-type": "cffc1d89-62da-4a08-89e2-e13d85e908a7"}
+{"enable": false}
+```
+
+```sh
+python -m infer_json examples/map.jsonl
+```
+
+```ts
+type Variant0 = {
+  enable: boolean;
+};
+
+type Root = Variant0 | Record<string, boolean | string>;
+```
+
+And for Go:
+
+```sh
+python -m infer_json examples/map.jsonl --output go
+```
+
+```go
+type Variant0 struct {
+	Enable bool `json:"enable"`
+}
+
+// Root is one of: Variant0, map[string]any
+```
+
+The `-K` or `--max-key-length` option controls this threshold. Setting it to 0 disables map detection entirely.
+
+With the `-F` or `--flatten-maps` flag, if any top-level object is detected as a map, all top-level objects are flattened into the map type.
+
+```sh
+python -m infer_json examples/map.jsonl --flatten-maps
+```
+
+```ts
+type Root = Record<string, boolean | string>;
+```
+
+### Top-Level Arrays
+
+When the input is a JSON array rather than an object, the tool infers the item type and produces an array type for `Root`.
+
+```json
+[
+    {"foo": "top-level-list"},
+    {"foo": "bar", "bar": "baz"}
+]
+```
+
+```sh
+python -m infer_json examples/list.json
+```
+
+```ts
+type RootItem = {
+  foo: string;
+  bar?: string;
+};
+
+type Root = RootItem[];
+```
+
+And for Go:
+
+```sh
+python -m infer_json examples/list.json --output go
+```
+
+```go
+type RootItem struct {
+	Foo string `json:"foo"`
+	Bar *string `json:"bar,omitempty"`
+}
+
+// Root is []RootItem
+```
+
+### Multiple Files
+
+The tool accepts multiple files and merges all objects into a single type.
+
+### Comments
+
+The tool supports JSONC files (JSON with comments). Files with the `.jsonc` extension are parsed with comments stripped automatically.
+
+### Other Options
+
+- `-L` or `--max-literal-length`: When using `--max-literals`, string literals longer than this are widened to `string`. This prevents long values like UUIDs or URLs from being kept as literals. Set to 0 to disable.
+- `--jsonl`: Force all input files to be parsed as JSONL, regardless of file extension.
 
 ## Background
 
 This project grew out of a script I wrote for generating Go structs from JSON API responses. I ran into a similar issue on a TypeScript project and realized this could be a useful project. 
+
+You can see more details about the underling type system in the [typing document](/typing.md)

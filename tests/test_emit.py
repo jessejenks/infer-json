@@ -1,4 +1,3 @@
-from infer_json.config import Config
 from infer_json.emit import extract_named_types, snake_to_pascal
 from infer_json.emit_go import type_to_go
 from infer_json.emit_ts import type_to_ts
@@ -10,10 +9,10 @@ from infer_json.type_exprs import (
     MapType,
     NamedRef,
     Null,
-    NullableType,
     RecordType,
     StringLiteralType,
     StringType,
+    TypeExpr,
     UnionType,
     Unknown,
 )
@@ -49,9 +48,6 @@ class TestTypeToTs:
         t = ListType(UnionType([StringType, IntType]))
         assert type_to_ts(t) == "(string | number)[]"
 
-    def test_nullable(self):
-        assert type_to_ts(NullableType(StringType)) == "string | null"
-
     def test_map(self):
         assert type_to_ts(MapType(StringType)) == "Record<string, string>"
 
@@ -59,13 +55,13 @@ class TestTypeToTs:
         assert type_to_ts(NamedRef("Foo")) == "Foo"
 
     def test_record(self):
-        t = RecordType({"name": StringType, "age": IntType})
+        t = RecordType({"name": (StringType, True), "age": (IntType, True)})
         result = type_to_ts(t)
         assert "name: string;" in result
         assert "age: number;" in result
 
     def test_optional_fields(self):
-        t = RecordType({"name": NullableType(StringType)})
+        t = RecordType({"name": (StringType, False)})
         result = type_to_ts(t)
         assert "name?: string;" in result
 
@@ -89,9 +85,6 @@ class TestTypeToGo:
         t = ListType(UnionType([StringType, IntType]))
         assert type_to_go(t) == "[]any"
 
-    def test_nullable(self):
-        assert type_to_go(NullableType(StringType)) == "*string"
-
     def test_map(self):
         assert type_to_go(MapType(StringType)) == "map[string]string"
 
@@ -99,38 +92,40 @@ class TestTypeToGo:
         assert type_to_go(NamedRef("Foo")) == "Foo"
 
     def test_record(self):
-        t = RecordType({"name": StringType, "age": IntType})
+        t = RecordType({"name": (StringType, True), "age": (IntType, True)})
         result = type_to_go(t)
         assert 'Name string `json:"name"`' in result
         assert 'Age int `json:"age"`' in result
 
     def test_optional_fields(self):
-        t = RecordType({"name": NullableType(StringType)})
+        t = RecordType({"name": (StringType, False)})
         result = type_to_go(t)
         assert 'Name *string `json:"name,omitempty"`' in result
 
 
 class TestExtractNamedTypes:
     def test_simple_record(self):
-        t = RecordType({"x": StringType})
-        extracted = {}
+        t = RecordType({"x": (StringType, True)})
+        extracted: dict[str, TypeExpr] = {}
         ref = extract_named_types(t, ["Foo"], extracted)
         assert ref.kind == "ref"
         assert ref.name == "Foo"
         assert "Foo" in extracted
-        assert extracted["Foo"].fields["x"] is StringType
+        foo = extracted["Foo"]
+        assert foo.kind == "record"
+        assert foo.fields["x"][0] is StringType
 
     def test_nested_records(self):
-        inner = RecordType({"y": IntType})
-        outer = RecordType({"child": inner})
+        inner = RecordType({"y": (IntType, True)})
+        outer = RecordType({"child": (inner, True)})
         extracted = {}
         extract_named_types(outer, ["Parent"], extracted)
         assert "Parent" in extracted
         assert "ParentChild" in extracted
 
     def test_dedup_names(self):
-        t1 = RecordType({"x": StringType})
-        t2 = RecordType({"y": IntType})
+        t1 = RecordType({"x": (StringType, True)})
+        t2 = RecordType({"y": (IntType, True)})
         extracted = {}
         extract_named_types(t1, ["Foo"], extracted)
         extract_named_types(t2, ["Foo"], extracted)
@@ -138,24 +133,9 @@ class TestExtractNamedTypes:
         assert "Foo2" in extracted
 
     def test_map_value_extracted(self):
-        inner = RecordType({"val": StringType})
-        t = RecordType({"data": MapType(inner)})
+        inner = RecordType({"val": (StringType, True)})
+        t = RecordType({"data": (MapType(inner), True)})
         extracted = {}
         extract_named_types(t, ["Root"], extracted)
         assert "Root" in extracted
         assert "RootData" in extracted
-
-
-class TestCluster:
-    def test_discriminant_discovery(self):
-        from infer_json.cluster import cluster_objects, find_discriminant_key
-
-        config = Config()
-        objects = [
-            {"type": "a", "x": 1},
-            {"type": "a", "x": 2},
-            {"type": "b", "y": "hi"},
-        ]
-        clusters, _ = cluster_objects(objects, config)
-        disc = find_discriminant_key(clusters)
-        assert disc == "type"

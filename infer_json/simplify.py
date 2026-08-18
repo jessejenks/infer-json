@@ -1,79 +1,67 @@
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from functools import reduce
 
 from .config import Config
-from .merge import merge_records
 from .type_exprs import (
     ListType,
     MapType,
-    NullableType,
     RecordType,
     StringType,
     TypeExpr,
     UnionType,
     flatten_union_members,
+    merge,
+    merge_records,
+    merge_union_members,
 )
-
-
-def type_eq(a: TypeExpr, b: TypeExpr) -> bool:
-    if a.kind != b.kind:
-        return False
-    match a.kind:
-        case "unknown" | "null":
-            return True
-        case "atom":
-            return a.name == b.name  # type: ignore
-        case "string_literal":
-            return a.value == b.value  # type: ignore
-        case "ref":
-            return a.name == b.name  # type: ignore
-        case "list":
-            return type_eq(a.element_type, b.element_type)  # type: ignore
-        case "nullable":
-            return type_eq(a.element_type, b.element_type)  # type: ignore
-        case "record":
-            if a.fields.keys() != b.fields.keys():  # type: ignore
-                return False
-            return all(type_eq(a.fields[k], b.fields[k]) for k in a.fields)  # type: ignore
-        case "map":
-            return type_eq(a.value_type, b.value_type)  # type: ignore
-        case "union":
-            if len(a.members) != len(b.members):  # type: ignore
-                return False
-            return all(type_eq(x, y) for x, y in zip(a.members, b.members))  # type: ignore
-    return False
-
-
-def dedup_union_members(members: List[TypeExpr]) -> List[TypeExpr]:
-    flat = flatten_union_members(members)
-    has_string = any(m.kind == "atom" and m.name == "string" for m in flat)
-    result: List[TypeExpr] = []
-    for m in flat:
-        if has_string and m.kind == "string_literal":
-            continue
-        if not any(type_eq(m, existing) for existing in result):
-            result.append(m)
-    return result
 
 
 def record_overlapping_key_count(a: RecordType, b: RecordType) -> int:
     return len(a.fields.keys() & b.fields.keys())
 
 
+def _collapse_lists(members: list[TypeExpr]) -> list[TypeExpr]:
+    lists: list[ListType] = []
+    rest: list[TypeExpr] = []
+    for m in members:
+        if m.kind == "list":
+            lists.append(m)
+        else:
+            rest.append(m)
+    if len(lists) < 2:
+        return members
+    combined = ListType(reduce(merge, [l.element_type for l in lists]))
+    return rest + [combined]
+
+
+def _collapse_maps(members: list[TypeExpr]) -> list[TypeExpr]:
+    maps: list[MapType] = []
+    rest: list[TypeExpr] = []
+    for m in members:
+        if m.kind == "map":
+            maps.append(m)
+        else:
+            rest.append(m)
+    if len(maps) < 2:
+        return members
+    combined = MapType(reduce(merge, [m.value_type for m in maps]))
+    return rest + [combined]
+
+
 def simplify_unions(t: TypeExpr, min_shared_keys: int) -> TypeExpr:
     match t.kind:
         case "record":
-            return RecordType({k: simplify_unions(v, min_shared_keys) for k, v in t.fields.items()})
-        case "nullable":
-            return NullableType(simplify_unions(t.element_type, min_shared_keys))
+            return RecordType({k: (simplify_unions(v, min_shared_keys), r) for k, (v, r) in t.fields.items()})
         case "list":
             return ListType(simplify_unions(t.element_type, min_shared_keys))
         case "map":
             return MapType(simplify_unions(t.value_type, min_shared_keys))
         case "union":
             simplified = [simplify_unions(m, min_shared_keys) for m in t.members]
-            simplified = dedup_union_members(simplified)
+            simplified = merge_union_members(simplified)
+            simplified = _collapse_lists(simplified)
+            simplified = _collapse_maps(simplified)
             if min_shared_keys > 0:
                 simplified = merge_similar_records(simplified, min_shared_keys)
             if len(simplified) == 1:
@@ -101,8 +89,8 @@ def rewrap_record(original: TypeExpr, merged: RecordType) -> TypeExpr:
     return merged
 
 
-def merge_similar_records(members: List[TypeExpr], threshold: int) -> List[TypeExpr]:
-    candidates: List[Tuple[int, RecordType]] = []
+def merge_similar_records(members: list[TypeExpr], threshold: int) -> list[TypeExpr]:
+    candidates: list[tuple[int, RecordType]] = []
     for i, m in enumerate(members):
         rec = unwrap_to_record(m)
         if rec is not None:
@@ -111,8 +99,8 @@ def merge_similar_records(members: List[TypeExpr], threshold: int) -> List[TypeE
     if len(candidates) < 2:
         return members
 
-    merged_into: Dict[int, int] = {}
-    merged_records: Dict[int, RecordType] = {i: rec for i, rec in candidates}
+    merged_into: dict[int, int] = {}
+    merged_records: dict[int, RecordType] = {i: rec for i, rec in candidates}
 
     changed = True
     while changed:
@@ -123,12 +111,12 @@ def merge_similar_records(members: List[TypeExpr], threshold: int) -> List[TypeE
             for b_pos in range(a_pos + 1, len(idxs)):
                 j = idxs[b_pos]
                 if record_overlapping_key_count(merged_records[i], merged_records[j]) >= threshold:
-                    merged_records[i] = merge_records(merged_records[i], merged_records[j])
+                    merged_records[i] = merge_records(merged_records[i].fields, merged_records[j].fields)
                     merged_into[j] = i
                     changed = True
 
     candidate_idxs = {i for i, _ in candidates}
-    result: List[TypeExpr] = []
+    result: list[TypeExpr] = []
     for i, m in enumerate(members):
         if i in merged_into:
             continue
@@ -163,21 +151,19 @@ def widen_literals(t: TypeExpr, discriminant_key: str | None, config: Config) ->
                 return StringType
             return t
         case "record":
-            new_fields = {}
-            for k, v in t.fields.items():
+            new_fields: dict[str, tuple[TypeExpr, bool]] = {}
+            for k, (v, r) in t.fields.items():
                 if k == discriminant_key:
-                    new_fields[k] = v
+                    new_fields[k] = v, r
                 else:
-                    new_fields[k] = widen_literals(v, None, config)
+                    new_fields[k] = (widen_literals(v, None, config), r)
             return RecordType(new_fields)
-        case "nullable":
-            return NullableType(widen_literals(t.element_type, None, config))
         case "list":
             return ListType(widen_literals(t.element_type, None, config))
         case "map":
             return MapType(widen_literals(t.value_type, None, config))
         case "union":
-            flat = flatten_union_members(t.members)
+            flat = merge_union_members(flatten_union_members(t.members))
             n = count_literals(t)
             if n > config.max_literals:
                 widened = []
@@ -186,7 +172,11 @@ def widen_literals(t: TypeExpr, discriminant_key: str | None, config: Config) ->
                         widened.append(StringType)
                     else:
                         widened.append(widen_literals(m, None, config))
-                return UnionType(widened)
-            return UnionType([widen_literals(m, None, config) for m in flat])
+                result = merge_union_members(widened)
+            else:
+                result = merge_union_members([widen_literals(m, None, config) for m in flat])
+            if len(result) == 1:
+                return result[0]
+            return UnionType(result)
         case _:
             return t

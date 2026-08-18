@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from .config import Config
-from .merge import merge
 from .type_exprs import (
     BoolType,
     FloatType,
@@ -15,10 +14,11 @@ from .type_exprs import (
     StringLiteralType,
     TypeExpr,
     Unknown,
+    merge,
 )
 
 
-def _has_data_keys(keys: Any, max_key_length: int) -> bool:
+def _looks_like_map_keys(keys: Any, max_key_length: int) -> bool:
     if max_key_length == 0:
         return False
     for k in keys:
@@ -46,13 +46,10 @@ def infer_type(value: Any, config: Config) -> TypeExpr:
             elem_type = merge(elem_type, infer_type(v, config))
         return ListType(elem_type)
     if isinstance(value, dict):
-        if _has_data_keys(value.keys(), config.max_key_length):
+        if _looks_like_map_keys(value.keys(), config.max_key_length):
             val_type: TypeExpr = Unknown
             for v in value.values():
                 val_type = merge(val_type, infer_type(v, config))
             return MapType(val_type)
-        fields: Dict[str, TypeExpr] = {}
-        for k, v in value.items():
-            fields[k] = infer_type(v, config)
-        return RecordType(fields)
+        return RecordType({k: (infer_type(v, config), True) for k, v in value.items()})
     return Unknown
