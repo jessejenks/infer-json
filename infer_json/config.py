@@ -15,7 +15,7 @@ class Config(argparse.Namespace):
 
     @staticmethod
     def attach_arguments(parser: argparse.ArgumentParser):
-        parser.add_argument("files", nargs="+", help="JSON or JSONL files to process")
+        parser.add_argument("files", nargs="*", help="JSON or JSONL files to process (reads stdin if none given, or use - for stdin)")
         parser.add_argument(
             "--jsonl",
             action="store_true",

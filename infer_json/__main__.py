@@ -49,10 +49,15 @@ def main() -> None:
         args.max_literals = 0
         args.find_discriminant = False
 
+    if not args.files:
+        args.files = ["-"]
+
     items: list[object] = []
     for filepath in args.files:
-        is_jsonl = args.jsonl or filepath.endswith(".jsonl")
-        with open(filepath, "r") as f:
+        is_stdin = filepath == "-"
+        is_jsonl = args.jsonl or (not is_stdin and filepath.endswith(".jsonl"))
+        f = sys.stdin if is_stdin else open(filepath, "r")
+        try:
             if is_jsonl:
                 for line in f:
                     line = _clean_line(line)
@@ -62,6 +67,9 @@ def main() -> None:
             else:
                 cleaned = "\n".join(cl for line in f if (cl := _clean_line(line)))
                 items.append(json.loads(cleaned))
+        finally:
+            if not is_stdin:
+                f.close()
 
     print(f"// Inferred from {len(items)} items across {len(args.files)} file(s)", file=sys.stderr)
 
