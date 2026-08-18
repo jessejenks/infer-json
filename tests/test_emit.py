@@ -1,4 +1,5 @@
-from infer_json.emit import extract_named_types, snake_to_pascal
+from infer_json.config import Config
+from infer_json.emit import extract_named_types, prepare_variants, snake_to_pascal
 from infer_json.emit_go import type_to_go
 from infer_json.emit_ts import type_to_ts
 from infer_json.type_exprs import (
@@ -139,3 +140,51 @@ class TestExtractNamedTypes:
         extract_named_types(t, ["Root"], extracted)
         assert "Root" in extracted
         assert "RootData" in extracted
+
+
+class TestPrepareVariants:
+    def test_default_variant_names(self):
+        named_types: list[tuple[str | None, TypeExpr]] = [
+            (None, RecordType({"x": (IntType, True)})),
+            (None, RecordType({"y": (StringType, True)})),
+        ]
+        extracted, _ = prepare_variants(named_types, Config())
+        assert "Variant0" in extracted
+        assert "Variant1" in extracted
+
+    def test_discriminant_name_used_as_label(self):
+        named_types: list[tuple[str | None, TypeExpr]] = [("dog", RecordType({"bark": (BoolType, True)}))]
+        extracted, _ = prepare_variants(named_types, Config())
+        assert "Dog" in extracted
+
+    def test_prefix_on_anonymous_variants(self):
+        named_types: list[tuple[str | None, TypeExpr]] = [
+            (None, RecordType({"x": (IntType, True)})),
+            (None, RecordType({"y": (StringType, True)})),
+        ]
+        extracted, _ = prepare_variants(named_types, Config(prefix="My"))
+        assert "MyVariant0" in extracted
+        assert "MyVariant1" in extracted
+
+    def test_prefix_on_discriminant_names(self):
+        named_types: list[tuple[str | None, TypeExpr]] = [
+            ("dog", RecordType({"bark": (BoolType, True)})),
+            ("cat", RecordType({"purr": (BoolType, True)})),
+        ]
+        extracted, _ = prepare_variants(named_types, Config(prefix="My"))
+        assert "MyDog" in extracted
+        assert "MyCat" in extracted
+
+    def test_custom_variant_word(self):
+        named_types: list[tuple[str | None, TypeExpr]] = [
+            (None, RecordType({"x": (IntType, True)})),
+            (None, RecordType({"y": (StringType, True)})),
+        ]
+        extracted, _ = prepare_variants(named_types, Config(variant="Case"))
+        assert "Case0" in extracted
+        assert "Case1" in extracted
+
+    def test_prefix_and_variant_combined(self):
+        named_types: list[tuple[str | None, TypeExpr]] = [(None, RecordType({"x": (IntType, True)}))]
+        extracted, _ = prepare_variants(named_types, Config(prefix="Response", variant="Case"))
+        assert "Root" in extracted
