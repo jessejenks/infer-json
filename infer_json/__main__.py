@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
 import re
 import sys
@@ -41,7 +42,8 @@ def _clean_line(line: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="infer_json", description="Infer types from JSON/JSONL files")
+    parser = argparse.ArgumentParser(prog="infer-json", description="Infer types from JSON/JSONL files")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {importlib.metadata.version('infer-json')}")
     Config.attach_arguments(parser)
     args = parser.parse_args(namespace=Config())
 

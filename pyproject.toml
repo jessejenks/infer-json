@@ -1,11 +1,18 @@
 [project]
 name = "infer-json"
-version = "0.2.0"
+version = "1.0.0"
 description = "Infer TypeScript/Go types from JSON/JSONL files"
 requires-python = ">=3.12"
 
+[project.scripts]
+infer-json = "infer_json.__main__:main"
+
 [dependency-groups]
 dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.black]
 line-length = 120
