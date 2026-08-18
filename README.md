@@ -407,7 +407,22 @@ The tool accepts multiple files and merges all objects into a single type.
 
 ### Comments
 
-The tool supports JSONC files (JSON with comments). Files with the `.jsonc` extension are parsed with comments stripped automatically.
+The tool supports JSONC files (JSON with comments). Files have comments stripped automatically regardless of the extension.
+
+### Depth
+
+The `-D` or `--max-depth` flag limits how many levels of nested objects are expanded. Objects beyond the limit are collapsed to `unknown`/`any`. The default is 0, meaning no limit. Only record nesting counts toward the depth, not lists.
+
+```sh
+infer-json examples/nested.json --max-depth 1
+```
+
+```ts
+type Root = {
+	foo: string;
+	nested: unknown;
+};
+```
 
 ### Naming Options
 
