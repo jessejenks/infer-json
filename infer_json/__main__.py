@@ -55,11 +55,14 @@ def main() -> None:
         args.files = ["-"]
 
     items: list[object] = []
+    read_any_successfully = False
     for filepath in args.files:
         is_stdin = filepath == "-"
         is_jsonl = args.jsonl or (not is_stdin and filepath.endswith(".jsonl"))
-        f = sys.stdin if is_stdin else open(filepath, "r")
+        f = sys.stdin
         try:
+            if not is_stdin:
+                f = open(filepath, "r")
             if is_jsonl:
                 for line in f:
                     line = _clean_line(line)
@@ -69,9 +72,19 @@ def main() -> None:
             else:
                 cleaned = "\n".join(cl for line in f if (cl := _clean_line(line)))
                 items.append(json.loads(cleaned))
+            read_any_successfully = True
+        except OSError:
+            print("Filed to read file", file=sys.stderr)
+            pass
+        except json.JSONDecodeError as e:
+            print("Error parsing JSON document", file=sys.stderr)
+            print(f"{e.msg}: line {e.lineno} column {e.colno} (char {e.pos})", file=sys.stderr)
         finally:
             if not is_stdin:
                 f.close()
+
+    if not read_any_successfully:
+        return
 
     print(f"// Inferred from {len(items)} items across {len(args.files)} file(s)", file=sys.stderr)
 
@@ -82,7 +95,9 @@ def main() -> None:
         for type_name, type_expr in extracted.items():
             print(f"type {type_name} {type_to_go(type_expr, args)}\n")
         variant_names = [type_to_go(v, args) for v in variants]
-        if len(variants) > 1:
+        if not variants:
+            pass
+        elif len(variants) > 1:
             print(f"// {args.root} is one of: {', '.join(variant_names)}")
         elif variant_names[0] not in extracted:
             print(f"// {args.root} is {variant_names[0]}")
@@ -90,7 +105,9 @@ def main() -> None:
         for type_name, type_expr in extracted.items():
             print(f"type {type_name} = {type_to_ts(type_expr, args)};\n")
         variant_names = [type_to_ts(v, args) for v in variants]
-        if len(variants) > 1:
+        if not variants:
+            pass
+        elif len(variants) > 1:
             print(f"type {args.root} = {' | '.join(variant_names)};")
         elif variant_names[0] not in extracted:
             print(f"type {args.root} = {variant_names[0]};")
