@@ -20,7 +20,7 @@ class Config(argparse.Namespace):
     readonly: bool = False
     use_spaces: bool = False
     tab_width: int = 2
-    output: Literal["ts", "go"] = "ts"
+    output: Literal["ts", "typescript", "go", "py", "python"] = "typescript"
 
     @staticmethod
     def attach_arguments(parser: argparse.ArgumentParser):
@@ -112,6 +112,6 @@ class Config(argparse.Namespace):
         parser.add_argument(
             "-o",
             "--output",
-            choices=["ts", "go"],
-            help="Output language (default: ts)",
+            choices=("typescript", "ts", "go", "python", "py"),
+            help="Output language (default: typescript)",
         )

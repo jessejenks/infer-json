@@ -63,7 +63,7 @@ def _name_record_variants(groups: list[RecordType], discriminant: str | None) ->
     if discriminant:
         groups = _regroup_by_discriminant(groups, discriminant)
 
-    print(f"// {len(groups)} variant(s)\n", file=sys.stderr)
+    # print(f"// {len(groups)} variant(s)\n", file=sys.stderr)
 
     named: list[tuple[str | None, TypeExpr]] = []
     for group in groups:

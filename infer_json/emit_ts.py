@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import re
 
 from .config import Config
+from .emit import get_indent
 from .type_exprs import Null, RecordType, TypeExpr
 
 
-def type_to_ts(t: TypeExpr, config: Config, indent: int = 0) -> str:
+def type_to_ts(t: TypeExpr, config: Config, depth: int = 0) -> str:
     match t.kind:
         case "unknown":
             return "unknown"
@@ -19,9 +21,9 @@ def type_to_ts(t: TypeExpr, config: Config, indent: int = 0) -> str:
         case "ref":
             return t.name
         case "map":
-            return f"Record<string, {type_to_ts(t.value_type, config, indent)}>"
+            return f"Record<string, {type_to_ts(t.value_type, config, depth)}>"
         case "list":
-            inner = type_to_ts(t.element_type, config, indent)
+            inner = type_to_ts(t.element_type, config, depth)
             if t.element_type.kind == "union":
                 return f"({inner})[]"
             return f"{inner}[]"
@@ -32,26 +34,31 @@ def type_to_ts(t: TypeExpr, config: Config, indent: int = 0) -> str:
                 if m is Null:
                     nullable = True
                     continue
-                parts.append(type_to_ts(m, config, indent))
+                parts.append(type_to_ts(m, config, depth))
             if nullable:
                 parts.append("null")
             return " | ".join(parts)
         case "record":
-            return record_to_ts(t, config, indent)
+            return record_to_ts(t, config, depth)
     raise ValueError(f"Unhandled type kind: {t.kind}")
 
 
-def record_to_ts(t: RecordType, config: Config, indent: int = 0) -> str:
+# JS is actually very permissive but we are conservative for quoting
+_TS_IDENTIFIER = re.compile(r"^[a-zA-Z0-9_]+$")
+
+
+def record_to_ts(t: RecordType, config: Config, depth: int = 0) -> str:
     if not t.fields:
         return "{}"
-    unit = " " * config.tab_width if config.use_spaces else "\t"
-    pad = unit * (indent + 1)
-    closing_pad = unit * indent
+    pad = get_indent(depth + 1, config)
+    closing_pad = get_indent(depth, config)
     readonly = "readonly " if config.readonly else ""
     fields = sorted(t.fields.items()) if config.sort_keys else list(t.fields.items())
     lines = []
     for key, (field_type, required) in fields:
-        s = type_to_ts(field_type, config, indent + 1)
+        s = type_to_ts(field_type, config, depth + 1)
         opt = "" if required else "?"
+        if not _TS_IDENTIFIER.match(key):
+            key = json.dumps(key)
         lines.append(f"{pad}{readonly}{key}{opt}: {s};")
     return "{\n" + "\n".join(lines) + f"\n{closing_pad}}}"

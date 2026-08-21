@@ -1,6 +1,6 @@
 # Infer JSON
 
-Tool to infer type definitions from JSON data. This is useful for exploring data where schemas don't exist or aren't public. Currently supports TypeScript and Go.
+Tool to infer type definitions from JSON data. This is useful for exploring data where schemas don't exist or aren't public. Currently supports TypeScript, Go, and Python
 
 ## Installation
 
@@ -50,10 +50,6 @@ type Root = {
 
 And a similar struct definition for Go.
 
-```sh
-infer-json examples/basic.jsonl --output go
-```
-
 ```go
 type Root struct {
 	Name string `json:"name"`
@@ -62,6 +58,18 @@ type Root struct {
 	CompletedAt any `json:"completedAt"`
 	Days []string `json:"days"`
 }
+```
+
+And a `TypedDict` in Python
+
+```py
+Root = TypedDict("Root", {
+	"name": str,
+	"count": int,
+	"ratio": float,
+	"completedAt": None,
+	"days": list[str],
+})
 ```
 
 ### Literal types
@@ -83,7 +91,7 @@ type Root = {
 };
 ```
 
-This can be controlled with `--max-literals` flag. Note that this *only* applies to strings, not numbers.
+This can be controlled with `-l` or `--max-literals` flag. Note that this *only* applies to strings, not numbers.
 
 ```sh
 infer-json examples/string-literals.jsonl --max-literals 2
@@ -96,6 +104,14 @@ type Root = {
 ```
 
 This means that up to 2 distinct values for the key `"foo"` are kept as literals before falling back to `string`.
+
+Python also supports literal types.
+
+```py
+Root = TypedDict("Root", {
+	"foo": Literal["a"] | Literal["b"],
+})
+```
 
 Go does not have any context of literals, so `--max-literals` is ignored and strings are always inferred as `string`
 
@@ -164,7 +180,26 @@ type Cat = {
 type Root = Dog | Cat;
 ```
 
-Notice that the discriminating key `"type"` is a literal type even though max literals was 0.
+Notice that the discriminating key `"type"` has a literal type even though max literals was 0.
+
+The same can be done in Python.
+
+```py
+Dog = TypedDict("Dog", {
+	"type": Literal["dog"],
+	"bark": bool,
+})
+
+Cat = TypedDict("Cat", {
+	"type": Literal["cat"],
+	"purr": NotRequired[bool],
+	"lives": NotRequired[int],
+})
+
+type Root = Dog | Cat
+```
+
+Optional fields use `NotRequired` for Python.
 
 Since Go does not have any literal types, it also does not have a discriminating key and so `--find-discriminant` is also ignored for go output.
 
@@ -196,11 +231,7 @@ type Root = {
 };
 ```
 
-And for Go:
-
-```sh
-infer-json examples/nested.json --output go
-```
+Similarly for Go and Python.
 
 ```go
 type RootNested struct {
@@ -211,6 +242,17 @@ type Root struct {
 	Foo string `json:"foo"`
 	Nested RootNested `json:"nested"`
 }
+```
+
+```py
+RootNested = TypedDict("RootNested", {
+	"bar": int,
+})
+
+Root = TypedDict("Root", {
+	"foo": str,
+	"nested": RootNested,
+})
 ```
 
 ### Merging Objects
@@ -251,11 +293,33 @@ type Variant2 = {
 type Root = Variant0 | Variant1 | Variant2;
 ```
 
-And for Go:
+And for Python
 
-```sh
-infer-json examples/merge-objects.jsonl --output go
+```py
+Variant0 = TypedDict("Variant0", {
+	"key1": int,
+	"key2": int,
+	"key3": int,
+})
+
+Variant1 = TypedDict("Variant1", {
+	"key1": int,
+	"key2": int,
+	"key3": int,
+	"key4": int,
+})
+
+Variant2 = TypedDict("Variant2", {
+	"key1": int,
+	"key2": int,
+	"key3": int,
+	"key5": int,
+})
+
+type Root = Variant0 | Variant1 | Variant2
 ```
+
+And for Go
 
 ```go
 type Variant0 struct {
@@ -281,11 +345,15 @@ type Variant2 struct {
 // Root is one of: Variant0, Variant1, Variant2
 ```
 
-This can be controlled with the `-k` or `--min-shared-keys` option.
+Notice that since Go does not have union types there is no top-level type definition.
+
+Whether record[^1] types should be considered the same type can be controlled with the `-k` or `--min-shared-keys` option.
 
 ```sh
 infer-json examples/merge-objects.jsonl --min-shared-keys 3
 ```
+
+This means objects with at least 3 shared keys should be merged.
 
 ```ts
 type Root = {
@@ -297,11 +365,7 @@ type Root = {
 };
 ```
 
-And for Go:
-
-```sh
-infer-json examples/merge-objects.jsonl --min-shared-keys 3 --output go
-```
+Similarly for Go and Python
 
 ```go
 type Root struct {
@@ -313,15 +377,25 @@ type Root struct {
 }
 ```
 
-This means objects with at least 3 shared keys should be merged.
+```py
+Root = TypedDict("Root", {
+	"key1": int,
+	"key2": int,
+	"key3": int,
+	"key4": NotRequired[int],
+	"key5": NotRequired[int],
+})
+```
 
 ### Map Types
 
-Objects with keys longer than a threshold are inferred as map types (`Record<string, T>` in TypeScript, `map[string]T` in Go).
+Objects with keys longer than a threshold are inferred as map types (`Record<string, T>` in TypeScript, `map[string]T` in Go, and `dict[str, T]` in Python).
+
+In this example, the first line is a record type, while the second is a map type.
 
 ```jsonl
-{"enable": true, "very-long-key-that-turns-this-into-a-map-type": "cffc1d89-62da-4a08-89e2-e13d85e908a7"}
 {"enable": false}
+{"enable": true, "very-long-key-that-turns-this-into-a-map-type": "cffc1d89-62da-4a08-89e2-e13d85e908a7"}
 ```
 
 ```sh
@@ -336,12 +410,6 @@ type Variant0 = {
 type Root = Variant0 | Record<string, boolean | string>;
 ```
 
-And for Go:
-
-```sh
-infer-json examples/map.jsonl --output go
-```
-
 ```go
 type Variant0 struct {
 	Enable bool `json:"enable"`
@@ -350,9 +418,60 @@ type Variant0 struct {
 // Root is one of: Variant0, map[string]any
 ```
 
+```py
+Variant0 = TypedDict("Variant0", {
+	"enable": bool,
+})
+
+type Root = Variant0 | dict[str, bool | str]
+```
+
 The `-K` or `--max-key-length` option controls this threshold. Setting it to 0 disables map detection entirely.
 
-With the `-F` or `--flatten-maps` flag, if any top-level object is detected as a map, all top-level objects are flattened into the map type.
+```ts
+type Variant0 = {
+	enable: boolean;
+};
+
+type Variant1 = {
+	enable: boolean;
+	"very-long-key-that-turns-this-into-a-map-type": string;
+};
+
+type Root = Variant0 | Variant1;
+```
+
+For Go
+
+```go
+type Variant0 struct {
+	Enable bool `json:"enable"`
+}
+
+type Variant1 struct {
+	Enable bool `json:"enable"`
+	VeryLongKeyThatTurnsThisIntoAMapType string `json:"very-long-key-that-turns-this-into-a-map-type"`
+}
+
+// Root is one of: Variant0, Variant1
+```
+
+and for Python
+
+```py
+Variant0 = TypedDict("Variant0", {
+	"enable": bool,
+})
+
+Variant1 = TypedDict("Variant1", {
+	"enable": bool,
+	"very-long-key-that-turns-this-into-a-map-type": str,
+})
+
+type Root = Variant0 | Variant1
+```
+
+Alternatively, if the `-F` or `--flatten-maps` flag is used, if any top-level object is detected as a map, all top-level objects are flattened into the map type.
 
 ```sh
 infer-json examples/map.jsonl --flatten-maps
@@ -378,27 +497,32 @@ infer-json examples/list.json
 ```
 
 ```ts
-type RootItem = {
-  foo: string;
-  bar?: string;
+type Variant = {
+	foo: string;
+	bar?: string;
 };
 
-type Root = RootItem[];
+type Root = Variant[];
 ```
 
-And for Go:
-
-```sh
-infer-json examples/list.json --output go
-```
+And for Go and Python.
 
 ```go
-type RootItem struct {
+type Variant struct {
 	Foo string `json:"foo"`
 	Bar *string `json:"bar,omitempty"`
 }
 
-// Root is []RootItem
+// Root is: []Variant
+```
+
+```py
+Variant = TypedDict("Variant", {
+	"foo": str,
+	"bar": NotRequired[str],
+})
+
+type Root = list[Variant]
 ```
 
 ### Multiple Files
@@ -407,7 +531,7 @@ The tool accepts multiple files and merges all objects into a single type.
 
 ### Comments
 
-The tool supports JSONC files (JSON with comments). Files have comments stripped automatically regardless of the extension.
+The tool supports basic JSONC line comments, but not block comments. Files have comments stripped automatically regardless of the extension.
 
 ### Depth
 
@@ -428,11 +552,27 @@ type Root = {
 
 By default, the root type is called `Root`, anonymous variants are numbered `Variant0`, `Variant1`, etc., and discriminant-derived names like `Dog` or `Cat` are used as-is. These can be customized with three independent flags.
 
-Note that no validation is done on the provided names, so make sure the result is a valid identifier in the target language.
+Note that provided names are converted to Pascal case and non-alphanumeric characters are removed.
 
 #### `--root`
 
 The `-r` or `--root` flag changes the root type name.
+
+```sh
+infer-json examples/basic.json --root Config
+```
+
+```ts
+type Config = {
+	name: string;
+	count: number;
+	ratio: number;
+	completedAt: null;
+	days: string[];
+};
+```
+
+This works with the names generated from discriminated keys as well.
 
 ```sh
 infer-json examples/discriminating.jsonl --find-discriminant --root Animal
@@ -455,7 +595,7 @@ type Animal = Dog | Cat;
 
 #### `--prefix`
 
-The `-p` or `--prefix` flag prepends a string to all generated type names other than the root.
+The `-p` or `--prefix` flag prepends a string to all generated type names.
 
 ```sh
 infer-json examples/discriminating.jsonl --find-discriminant --root Animal --prefix My
@@ -473,7 +613,7 @@ type MyCat = {
   lives?: number;
 };
 
-type Animal = MyDog | MyCat;
+type MyAnimal = MyDog | MyCat;
 ```
 
 #### `--variant`
@@ -508,37 +648,7 @@ type Case2 = {
 type Api = Case0 | Case1 | Case2;
 ```
 
-These flags can be combined. For example, `--prefix Response --variant Case` produces `ResponseCase0`, `ResponseCase1`, etc.
-
-All naming flags work with Go output as well.
-
-```sh
-infer-json examples/merge-objects.jsonl --root Api --variant Case --output go
-```
-
-```go
-type Case0 struct {
-	Key1 int `json:"key1"`
-	Key2 int `json:"key2"`
-	Key3 int `json:"key3"`
-}
-
-type Case1 struct {
-	Key1 int `json:"key1"`
-	Key2 int `json:"key2"`
-	Key3 int `json:"key3"`
-	Key4 int `json:"key4"`
-}
-
-type Case2 struct {
-	Key1 int `json:"key1"`
-	Key2 int `json:"key2"`
-	Key3 int `json:"key3"`
-	Key5 int `json:"key5"`
-}
-
-// Api is one of: Case0, Case1, Case2
-```
+These flags can be combined. For example, `--prefix Response --variant Case` produces `ResponseApi`, `ResponseCase0`, `ResponseCase1`, etc.
 
 ### Other Options
 
@@ -554,3 +664,7 @@ type Case2 struct {
 This project grew out of a script I wrote for generating Go structs from JSON API responses. I ran into a similar issue on a TypeScript project and realized this could be a useful project. 
 
 You can see more details about the underling type system in the [typing document](/typing.md)
+
+---
+
+[^1]: In type theory literature, record types as what we would call objects or dictionaries. But this is slightly at odds with TypeScript terminology which uses the `Record` type to mean a generic mapping like `Record<string, number>`. But this distinction is not totally clear because TS allows things like `Record<"a" | "b", number>` which is effectively equivalent to `{"a": number; "b": number}`.

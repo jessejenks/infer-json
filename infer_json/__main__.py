@@ -7,8 +7,9 @@ import re
 import sys
 
 from .config import Config
-from .emit import prepare_variants
+from .emit import needs_root_definition, prepare_variants
 from .emit_go import type_to_go
+from .emit_py import type_to_py
 from .emit_ts import type_to_ts
 from .pipeline import run_pipeline
 
@@ -91,26 +92,38 @@ def main() -> None:
     named_types = run_pipeline(items, args)
     extracted, variants = prepare_variants(named_types, args)
 
-    if args.output == "go":
-        for type_name, type_expr in extracted.items():
-            print(f"type {type_name} {type_to_go(type_expr, args)}\n")
-        variant_names = [type_to_go(v, args) for v in variants]
-        if not variants:
-            pass
-        elif len(variants) > 1:
-            print(f"// {args.root} is one of: {', '.join(variant_names)}")
-        elif variant_names[0] not in extracted:
-            print(f"// {args.root} is {variant_names[0]}")
-    else:
-        for type_name, type_expr in extracted.items():
-            print(f"type {type_name} = {type_to_ts(type_expr, args)};\n")
-        variant_names = [type_to_ts(v, args) for v in variants]
-        if not variants:
-            pass
-        elif len(variants) > 1:
-            print(f"type {args.root} = {' | '.join(variant_names)};")
-        elif variant_names[0] not in extracted:
-            print(f"type {args.root} = {variant_names[0]};")
+    match args.output:
+        case "typescript" | "ts":
+            for type_name, type_expr in extracted.items():
+                print(f"type {type_name} = {type_to_ts(type_expr, args)};\n")
+            variant_names = [type_to_ts(v, args) for v in variants]
+            if not variants:
+                return
+            if needs_root_definition(named_types):
+                print(f"type {args.prefix}{args.root} = {' | '.join(variant_names)};")
+        case "go":
+            for type_name, type_expr in extracted.items():
+                print(f"type {type_name} {type_to_go(type_expr, args)}\n")
+            variant_names = [type_to_go(v, args) for v in variants]
+            if not variants:
+                return
+            if needs_root_definition(named_types):
+                if len(variants) > 1:
+                    print(f"// {args.prefix}{args.root} is one of: {', '.join(variant_names)}")
+                else:
+                    print(f"// {args.prefix}{args.root} is: {', '.join(variant_names)}")
+
+        case "python" | "py":
+            for type_name, type_expr in extracted.items():
+                print(type_to_py(type_expr, args, name=type_name))
+                print()
+            if not variants:
+                return
+            if needs_root_definition(named_types):
+                if len(variants) > 1:
+                    print(f"type {args.prefix}{args.root} = {' | '.join(type_to_py(v, args) for v in variants)}")
+                    return
+                print(type_to_py(variants[0], args, name=f"{args.prefix}{args.root}"))
 
 
 if __name__ == "__main__":

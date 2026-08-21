@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .config import Config
-from .emit import snake_to_pascal
+from .emit import get_indent, normalize_to_pascal
 from .type_exprs import Null, RecordType, TypeExpr
 
 
@@ -30,16 +30,15 @@ def type_to_go(t: TypeExpr, config: Config) -> str:
     raise ValueError(f"Unhandled type kind: {t.kind}")
 
 
-def struct_to_go(t: RecordType, config: Config, indent: int = 0) -> str:
+def struct_to_go(t: RecordType, config: Config, depth: int = 0) -> str:
     if not t.fields:
         return "struct{}"
-    unit = " " * config.tab_width if config.use_spaces else "\t"
-    pad = unit * (indent + 1)
-    closing_pad = unit * indent
+    pad = get_indent(depth + 1, config)
+    closing_pad = get_indent(depth, config)
     fields = sorted(t.fields.items()) if config.sort_keys else list(t.fields.items())
     lines: list[str] = []
     for key, (field_type, required) in fields:
-        field_name = snake_to_pascal(key)
+        field_name = normalize_to_pascal(key)
         if not required:
             tag = f'`json:"{key},omitempty"`'
         else:

@@ -1,6 +1,14 @@
+import pytest
+
 from infer_json.config import Config
-from infer_json.emit import extract_named_types, prepare_variants, snake_to_pascal
+from infer_json.emit import (
+    _cache,
+    extract_named_types,
+    normalize_to_pascal,
+    prepare_variants,
+)
 from infer_json.emit_go import type_to_go
+from infer_json.emit_py import type_to_py
 from infer_json.emit_ts import type_to_ts
 from infer_json.type_exprs import (
     BoolType,
@@ -19,15 +27,19 @@ from infer_json.type_exprs import (
 )
 
 
-class TestSnakeToPascal:
+class TestNormalizeToPascal:
     def test_basic(self):
-        assert snake_to_pascal("hello_world") == "HelloWorld"
+        assert normalize_to_pascal("foo") == "Foo"
+        assert normalize_to_pascal("hello_world") == "HelloWorld"
 
     def test_kebab(self):
-        assert snake_to_pascal("queue-operation") == "QueueOperation"
+        assert normalize_to_pascal("queue-operation") == "QueueOperation"
 
-    def test_single(self):
-        assert snake_to_pascal("foo") == "Foo"
+    def test_whitespace(self):
+        assert normalize_to_pascal("hello world") == "HelloWorld"
+
+    def test_replace_non_alphanumeric(self):
+        assert normalize_to_pascal("!_@#hello≤1234#@_!") == "Hello1234"
 
 
 class TestTypeToTs:
@@ -104,6 +116,45 @@ class TestTypeToGo:
         assert 'Name *string `json:"name,omitempty"`' in result
 
 
+class TestTypeToPy:
+    def test_primitives(self):
+        assert type_to_py(Unknown, Config()) == "Any"
+        assert type_to_py(Null, Config()) == "None"
+        assert type_to_py(StringType, Config()) == "str"
+        assert type_to_py(IntType, Config()) == "int"
+        assert type_to_py(FloatType, Config()) == "float"
+        assert type_to_py(BoolType, Config()) == "bool"
+
+    def test_literal(self):
+        assert type_to_py(StringLiteralType("foo"), Config()) == 'Literal["foo"]'
+
+    def test_list(self):
+        assert type_to_py(ListType(StringType), Config()) == "list[str]"
+
+    def test_list_of_union_gets_parens(self):
+        t = ListType(UnionType([StringType, IntType]))
+        assert type_to_py(t, Config()) == "list[str | int]"
+
+    def test_map(self):
+        assert type_to_py(MapType(StringType), Config()) == "dict[str, str]"
+
+    def test_ref(self):
+        assert type_to_py(NamedRef("Foo"), Config()) == "Foo"
+
+    def test_record(self):
+        t = RecordType({"name": (StringType, True), "age": (IntType, True)})
+        result = type_to_py(t, Config(), name="Name")
+        assert 'Name = TypedDict("Name",'
+        assert '"name": str' in result
+        assert '"age": int' in result
+
+    def test_optional_fields(self):
+        t = RecordType({"name": (StringType, False)})
+        result = type_to_py(t, Config(), name="Name")
+        assert 'Name = TypedDict("Name",'
+        assert '"name": NotRequired[str]' in result
+
+
 class TestExtractNamedTypes:
     def test_simple_record(self):
         t = RecordType({"x": (StringType, True)})
@@ -177,6 +228,10 @@ class TestReadonly:
 
 
 class TestIndentation:
+    @pytest.fixture(autouse=True)
+    def _reset_indent_cache(self):
+        _cache.clear()
+
     def test_tabs(self):
         t = RecordType({"name": (StringType, True)})
         result = type_to_ts(t, Config())
@@ -248,4 +303,13 @@ class TestPrepareVariants:
     def test_prefix_and_variant_combined(self):
         named_types: list[tuple[str | None, TypeExpr]] = [(None, RecordType({"x": (IntType, True)}))]
         extracted, _ = prepare_variants(named_types, Config(prefix="Response", variant="Case"))
-        assert "Root" in extracted
+        assert "ResponseRoot" in extracted
+
+    def test_prefix_on_nested_within_variant(self):
+        inner = RecordType({"y": (IntType, True)})
+        named_types: list[tuple[str | None, TypeExpr]] = [
+            ("dog", RecordType({"child": (inner, True)})),
+        ]
+        extracted, _ = prepare_variants(named_types, Config(prefix="Api"))
+        assert "ApiDog" in extracted
+        assert "ApiDogChild" in extracted
