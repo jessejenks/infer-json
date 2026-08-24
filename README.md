@@ -201,7 +201,54 @@ type Root = Dog | Cat
 
 Optional fields use `NotRequired` for Python.
 
-Since Go does not have any literal types, it also does not have a discriminating key and so `--find-discriminant` is also ignored for go output.
+Since Go does not have any literal types, the discriminant key is just a `string`. But the `--find-discriminant` still groups variants by the discriminant value and names the struct accordingly.
+
+```go
+type Dog struct {
+	Type string `json:"type"`
+	Bark bool `json:"bark"`
+}
+
+type Cat struct {
+	Type string `json:"type"`
+	Purr *bool `json:"purr,omitempty"`
+	Lives *int `json:"lives,omitempty"`
+}
+
+// Root is one of: Dog, Cat
+```
+
+This can still be useful using `json.RawMessage` to distinguish the field before unmarshaling.
+
+```go
+var raw json.RawMessage
+json.Unmarshal(data, &raw)
+
+var peek struct { Type string `json:"type"` }
+json.Unmarshal(raw, &peek)
+
+switch peek.Type {
+case "cat":
+	var cat Cat
+	json.Unmarshal(raw, &cat)
+// etc
+}
+```
+
+However, you may prefer to have a single struct that covers all types, in which case you could use `-k` or `--min-shared-keys` to do the following.
+
+```sh
+infer-json examples/discriminating.jsonl --min-shared-keys 1 --output go
+```
+
+```go
+type Root struct {
+	Type string `json:"type"`
+	Bark *bool `json:"bark,omitempty"`
+	Purr *bool `json:"purr,omitempty"`
+	Lives *int `json:"lives,omitempty"`
+}
+```
 
 ### Nested Objects
 

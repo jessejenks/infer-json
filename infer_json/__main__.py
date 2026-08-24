@@ -50,7 +50,6 @@ def main() -> None:
 
     if args.output == "go":
         args.max_literals = 0
-        args.find_discriminant = False
 
     if not args.files:
         args.files = ["-"]
