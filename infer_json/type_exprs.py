@@ -4,18 +4,18 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 
-@dataclass
+@dataclass(frozen=True)
 class UnknownType:
     kind: Literal["unknown"] = "unknown"
 
 
-@dataclass
+@dataclass(frozen=True)
 class AtomicType:
     name: Literal["null", "boolean", "int", "float", "string"]
     kind: Literal["atom"] = "atom"
 
 
-@dataclass
+@dataclass(frozen=True)
 class StringLiteralType:
     value: str
     kind: Literal["string_literal"] = "string_literal"
@@ -93,27 +93,43 @@ def _is_subtype_records(a: dict[str, tuple[TypeExpr, bool]], b: dict[str, tuple[
 
 
 def is_subtype(a: TypeExpr, b: TypeExpr) -> bool:
-    if a == b:
+    # T ≤ T
+    # unknown ≤ T
+    if a is b or a.kind == "unknown":
         return True
-    match (a, b):
-        case (UnknownType(), _):
-            return True
-        case (AtomicType(name=u), AtomicType(name=v)):
-            return u == "int" and v == "float"
-        case (StringLiteralType(), AtomicType(name="string")):
-            return True
-        case (ListType(element_type=u), ListType(element_type=v)):
-            return is_subtype(u, v)
-        case (MapType(value_type=u), MapType(value_type=v)):
-            return is_subtype(u, v)
-        case (RecordType(), RecordType()):
-            return _is_subtype_records(a.fields, b.fields)
-        case (UnionType(members=u), _):
-            return all(is_subtype(u_m, b) for u_m in u)
-        case (_, UnionType(members=v)):
-            return any(is_subtype(a, v_m) for v_m in v)
-        case _:
-            return False
+
+    if a.kind == b.kind:
+        # T ≤ T
+        # int ≤ float
+        if a.kind == "atom":
+            return a.name == b.name or (a.name == "int" and b.name == "float")  # type: ignore[union-attr]
+        # T ≤ T
+        if a.kind == "string_literal":
+            return a.value == b.value  # type: ignore[union-attr]
+        # List T ≤ List S if T ≤ S
+        if a.kind == "list":
+            return is_subtype(a.element_type, b.element_type)  # type: ignore[union-attr]
+        # Map[K]T ≤ Map[K]S if T ≤ S
+        if a.kind == "map":
+            return is_subtype(a.value_type, b.value_type)  # type: ignore[union-attr]
+        if a.kind == "record":
+            return _is_subtype_records(a.fields, b.fields)  # type: ignore[union-attr]
+        # A1 | ... | An ≤ T if forall i, Ai ≤ T
+        if a.kind == "union":
+            return all(is_subtype(u_m, b) for u_m in a.members)  # type: ignore[union-attr]
+        return a == b
+
+    # literal ≤ string
+    if a.kind == "string_literal" and b.kind == "atom":
+        return b.name == "string"
+    # A1 | ... | An ≤ T if forall i, Ai ≤ T
+    if a.kind == "union":
+        return all(is_subtype(u_m, b) for u_m in a.members)
+    # A ≤ B1 | ... | Bm if exists j, A ≤ Bj
+    if b.kind == "union":
+        return any(is_subtype(a, v_m) for v_m in b.members)
+
+    return False
 
 
 def merge_records(a: dict[str, tuple[TypeExpr, bool]], b: dict[str, tuple[TypeExpr, bool]]) -> RecordType:
@@ -142,18 +158,65 @@ def flatten_union_members(members: list[TypeExpr]):
     return flat
 
 
-def merge_union_members(members: list[TypeExpr]) -> list[TypeExpr]:
-    result: list[TypeExpr] = []
+def _dedup_atoms_and_literals(
+    members: list[TypeExpr],
+) -> tuple[list[AtomicType | StringLiteralType], list[TypeExpr]]:
+    simple: list[AtomicType | StringLiteralType] = []
+    structural: list[TypeExpr] = []
+    seen_atoms: set[AtomicType] = set()
+    seen_literal_values: set[str] = set()
+
     for x in members:
+        # unknown | T = T
+        if x is Unknown:
+            continue
+
+        if x.kind == "atom":
+            # T | T = T
+            if x in seen_atoms:
+                continue
+            # int | float = float
+            if x is IntType and FloatType in seen_atoms:
+                continue
+            if x is FloatType and IntType in seen_atoms:
+                simple = [y for y in simple if y is not IntType]
+                seen_atoms.discard(IntType)
+            seen_atoms.add(x)
+            # "a" | string = string
+            if x is StringType and seen_literal_values:
+                simple = [y for y in simple if y.kind != "string_literal"]
+                seen_literal_values.clear()
+            simple.append(x)
+
+        elif x.kind == "string_literal":
+            # "a" | string = string
+            if StringType in seen_atoms:
+                continue
+            # T | T = T
+            if x.value in seen_literal_values:
+                continue
+            seen_literal_values.add(x.value)
+            simple.append(x)
+
+        else:
+            structural.append(x)
+
+    return simple, structural
+
+
+def merge_union_members(members: list[TypeExpr]) -> list[TypeExpr]:
+    simple, structural = _dedup_atoms_and_literals(members)
+    result: list[TypeExpr] = []
+    for x in structural:
         if any(is_subtype(x, y) for y in result):
             continue
         result = [y for y in result if not is_subtype(y, x)]
         result.append(x)
-    return result
+    return simple + result
 
 
 def merge(a: TypeExpr, b: TypeExpr) -> TypeExpr:
-    if a == b:
+    if a is b or a == b:
         return a
     match (a, b):
         case (UnknownType(), c) | (c, UnknownType()):
@@ -168,6 +231,8 @@ def merge(a: TypeExpr, b: TypeExpr) -> TypeExpr:
             return b
         case (AtomicType(name="string"), StringLiteralType()):
             return a
+        case (StringLiteralType(), StringLiteralType()):
+            return UnionType([a, b])
         case (RecordType(), RecordType()):
             return merge_records(a.fields, b.fields)
         case _:
