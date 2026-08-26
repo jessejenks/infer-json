@@ -163,7 +163,7 @@ def widen_literals(t: TypeExpr, discriminant_key: str | None, config: Config) ->
         case "map":
             return MapType(widen_literals(t.value_type, None, config))
         case "union":
-            flat = merge_union_members(flatten_union_members(t.members))
+            flat = t.members if t._normalized else merge_union_members(flatten_union_members(t.members))
             n = count_literals(t)
             if n > config.max_literals:
                 widened = []

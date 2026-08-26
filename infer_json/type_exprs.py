@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Literal, TypeAlias
 
 
@@ -38,11 +39,16 @@ class RecordType:
     fields: dict[str, tuple[TypeExpr, bool]]
     kind: Literal["record"] = "record"
 
+    @cached_property
+    def _keys(self) -> frozenset[str]:
+        return frozenset(self.fields.keys())
+
 
 @dataclass
 class UnionType:
     members: list[TypeExpr]
     kind: Literal["union"] = "union"
+    _normalized: bool = False
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, UnionType):
@@ -113,6 +119,8 @@ def is_subtype(a: TypeExpr, b: TypeExpr) -> bool:
         if a.kind == "map":
             return is_subtype(a.value_type, b.value_type)  # type: ignore[union-attr]
         if a.kind == "record":
+            if not a._keys <= b._keys:  # type: ignore[union-attr]
+                return False
             return _is_subtype_records(a.fields, b.fields)  # type: ignore[union-attr]
         # A1 | ... | An ≤ T if forall i, Ai ≤ T
         if a.kind == "union":
@@ -215,6 +223,49 @@ def merge_union_members(members: list[TypeExpr]) -> list[TypeExpr]:
     return simple + result
 
 
+def _insert_into_members(base: list[TypeExpr], new_members: list[TypeExpr]) -> list[TypeExpr]:
+    new_simple, new_structural = _dedup_atoms_and_literals(new_members)
+    if not new_simple and not new_structural:
+        return base
+
+    base_atoms: set[AtomicType] = set()
+    base_literal_values: set[str] = set()
+    for x in base:
+        if x.kind == "atom":
+            base_atoms.add(x)
+        elif x.kind == "string_literal":
+            base_literal_values.add(x.value)
+
+    result: list[TypeExpr] = list(base)
+    for x in new_simple:
+        if x.kind == "atom":
+            if x in base_atoms:
+                continue
+            if x is IntType and FloatType in base_atoms:
+                continue
+            if x is FloatType and IntType in base_atoms:
+                result = [y for y in result if y is not IntType]
+                base_atoms.discard(IntType)
+            base_atoms.add(x)
+            if x is StringType and base_literal_values:
+                result = [y for y in result if y.kind != "string_literal"]
+                base_literal_values.clear()
+        elif x.kind == "string_literal":
+            if StringType in base_atoms:
+                continue
+            if x.value in base_literal_values:
+                continue
+            base_literal_values.add(x.value)
+        result.append(x)
+
+    for x in new_structural:
+        if any(is_subtype(x, y) for y in result):
+            continue
+        result = [y for y in result if not is_subtype(y, x)]
+        result.append(x)
+    return result
+
+
 def merge(a: TypeExpr, b: TypeExpr) -> TypeExpr:
     if a is b or a == b:
         return a
@@ -235,10 +286,26 @@ def merge(a: TypeExpr, b: TypeExpr) -> TypeExpr:
             return UnionType([a, b])
         case (RecordType(), RecordType()):
             return merge_records(a.fields, b.fields)
+        case (UnionType(members=existing, _normalized=normalized), _):
+            base = existing if normalized else merge_union_members(flatten_union_members(existing))
+            result = _insert_into_members(base, flatten_union_members([b]))
+            if not result:
+                return Unknown
+            if len(result) == 1:
+                return result[0]
+            return UnionType(result, _normalized=True)
+        case (_, UnionType(members=existing, _normalized=normalized)):
+            base = existing if normalized else merge_union_members(flatten_union_members(existing))
+            result = _insert_into_members(base, flatten_union_members([a]))
+            if not result:
+                return Unknown
+            if len(result) == 1:
+                return result[0]
+            return UnionType(result, _normalized=True)
         case _:
             result = merge_union_members(flatten_union_members([a, b]))
             if not result:
                 return Unknown
             if len(result) == 1:
                 return result[0]
-            return UnionType(result)
+            return UnionType(result, _normalized=True)
