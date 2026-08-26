@@ -43,7 +43,7 @@ def infer_type(value: Any, config: Config, depth: int = 0) -> TypeExpr:
             return ListType(Unknown)
         elem_type: TypeExpr = Unknown
         for v in value:
-            elem_type = merge(elem_type, infer_type(v, config, depth))
+            elem_type = merge(elem_type, infer_type(v, config, depth), config.max_literals)
         return ListType(elem_type)
     if config.max_depth > 0 and config.max_depth == depth:
         return Unknown
@@ -51,7 +51,7 @@ def infer_type(value: Any, config: Config, depth: int = 0) -> TypeExpr:
         if _looks_like_map_keys(value.keys(), config.max_key_length):
             val_type: TypeExpr = Unknown
             for v in value.values():
-                val_type = merge(val_type, infer_type(v, config, depth + 1))
+                val_type = merge(val_type, infer_type(v, config, depth + 1), config.max_literals)
             return MapType(val_type)
         return RecordType({k: (infer_type(v, config, depth + 1), True) for k, v in value.items()})
     return Unknown

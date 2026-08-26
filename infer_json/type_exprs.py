@@ -140,13 +140,15 @@ def is_subtype(a: TypeExpr, b: TypeExpr) -> bool:
     return False
 
 
-def merge_records(a: dict[str, tuple[TypeExpr, bool]], b: dict[str, tuple[TypeExpr, bool]]) -> RecordType:
+def merge_records(
+    a: dict[str, tuple[TypeExpr, bool]], b: dict[str, tuple[TypeExpr, bool]], max_literals: int = -1
+) -> RecordType:
     result: dict[str, tuple[TypeExpr, bool]] = {}
     for k in [*a.keys(), *(k for k in b if k not in a)]:
         if k in a and k in b:
             ta, ra = a[k]
             tb, rb = b[k]
-            result[k] = (merge(ta, tb), ra and rb)
+            result[k] = (merge(ta, tb, max_literals), ra and rb)
         elif k in a:
             result[k] = (a[k][0], False)
         else:
@@ -168,6 +170,7 @@ def flatten_union_members(members: list[TypeExpr]):
 
 def _dedup_atoms_and_literals(
     members: list[TypeExpr],
+    max_literals: int = -1,
 ) -> tuple[list[AtomicType | StringLiteralType], list[TypeExpr]]:
     simple: list[AtomicType | StringLiteralType] = []
     structural: list[TypeExpr] = []
@@ -204,7 +207,13 @@ def _dedup_atoms_and_literals(
             if x.value in seen_literal_values:
                 continue
             seen_literal_values.add(x.value)
-            simple.append(x)
+            if max_literals >= 0 and len(seen_literal_values) > max_literals:
+                simple = [y for y in simple if y.kind != "string_literal"]
+                seen_literal_values.clear()
+                seen_atoms.add(StringType)
+                simple.append(StringType)
+            else:
+                simple.append(x)
 
         else:
             structural.append(x)
@@ -212,8 +221,8 @@ def _dedup_atoms_and_literals(
     return simple, structural
 
 
-def merge_union_members(members: list[TypeExpr]) -> list[TypeExpr]:
-    simple, structural = _dedup_atoms_and_literals(members)
+def merge_union_members(members: list[TypeExpr], max_literals: int = -1) -> list[TypeExpr]:
+    simple, structural = _dedup_atoms_and_literals(members, max_literals)
     result: list[TypeExpr] = []
     for x in structural:
         if any(is_subtype(x, y) for y in result):
@@ -223,8 +232,8 @@ def merge_union_members(members: list[TypeExpr]) -> list[TypeExpr]:
     return simple + result
 
 
-def _insert_into_members(base: list[TypeExpr], new_members: list[TypeExpr]) -> list[TypeExpr]:
-    new_simple, new_structural = _dedup_atoms_and_literals(new_members)
+def _insert_into_members(base: list[TypeExpr], new_members: list[TypeExpr], max_literals: int = -1) -> list[TypeExpr]:
+    new_simple, new_structural = _dedup_atoms_and_literals(new_members, max_literals)
     if not new_simple and not new_structural:
         return base
 
@@ -256,6 +265,12 @@ def _insert_into_members(base: list[TypeExpr], new_members: list[TypeExpr]) -> l
             if x.value in base_literal_values:
                 continue
             base_literal_values.add(x.value)
+            if 0 <= max_literals < len(base_literal_values):
+                result = [y for y in result if y.kind != "string_literal"]
+                base_literal_values.clear()
+                base_atoms.add(StringType)
+                result.append(StringType)
+                continue
         result.append(x)
 
     for x in new_structural:
@@ -266,7 +281,7 @@ def _insert_into_members(base: list[TypeExpr], new_members: list[TypeExpr]) -> l
     return result
 
 
-def merge(a: TypeExpr, b: TypeExpr) -> TypeExpr:
+def merge(a: TypeExpr, b: TypeExpr, max_literals: int = -1) -> TypeExpr:
     if a is b or a == b:
         return a
     match (a, b):
@@ -283,27 +298,29 @@ def merge(a: TypeExpr, b: TypeExpr) -> TypeExpr:
         case (AtomicType(name="string"), StringLiteralType()):
             return a
         case (StringLiteralType(), StringLiteralType()):
+            if 0 <= max_literals < 2:
+                return StringType
             return UnionType([a, b])
         case (RecordType(), RecordType()):
-            return merge_records(a.fields, b.fields)
+            return merge_records(a.fields, b.fields, max_literals)
         case (UnionType(members=existing, _normalized=normalized), _):
-            base = existing if normalized else merge_union_members(flatten_union_members(existing))
-            result = _insert_into_members(base, flatten_union_members([b]))
+            base = existing if normalized else merge_union_members(flatten_union_members(existing), max_literals)
+            result = _insert_into_members(base, flatten_union_members([b]), max_literals)
             if not result:
                 return Unknown
             if len(result) == 1:
                 return result[0]
             return UnionType(result, _normalized=True)
         case (_, UnionType(members=existing, _normalized=normalized)):
-            base = existing if normalized else merge_union_members(flatten_union_members(existing))
-            result = _insert_into_members(base, flatten_union_members([a]))
+            base = existing if normalized else merge_union_members(flatten_union_members(existing), max_literals)
+            result = _insert_into_members(base, flatten_union_members([a]), max_literals)
             if not result:
                 return Unknown
             if len(result) == 1:
                 return result[0]
             return UnionType(result, _normalized=True)
         case _:
-            result = merge_union_members(flatten_union_members([a, b]))
+            result = merge_union_members(flatten_union_members([a, b]), max_literals)
             if not result:
                 return Unknown
             if len(result) == 1:

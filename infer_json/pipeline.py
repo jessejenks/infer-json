@@ -17,7 +17,7 @@ from .type_exprs import (
 def run_pipeline(items: list[object], config: Config) -> list[tuple[str | None, TypeExpr]]:
     inferred = [infer_type(item, config) for item in items]
     records, other_types = _partition_records(inferred)
-    record_groups = _group_by_keyset(records)
+    record_groups = _group_by_keyset(records, config)
 
     discriminant: str | None = None
     if config.find_discriminant and len(record_groups) > 1:
@@ -48,12 +48,12 @@ def _partition_records(types: list[TypeExpr]) -> tuple[list[RecordType], list[Ty
     return records, other
 
 
-def _group_by_keyset(records: list[RecordType]) -> list[RecordType]:
+def _group_by_keyset(records: list[RecordType], config: Config) -> list[RecordType]:
     groups: dict[frozenset[str], RecordType] = {}
     for record in records:
         ks = frozenset(record.fields.keys())
         if ks in groups:
-            groups[ks] = merge_records(groups[ks].fields, record.fields)
+            groups[ks] = merge_records(groups[ks].fields, record.fields, config.max_literals)
         else:
             groups[ks] = record
     return list(groups.values())
