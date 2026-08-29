@@ -73,11 +73,12 @@ def main() -> None:
                 cleaned = "\n".join(cl for line in f if (cl := _clean_line(line)))
                 items.append(json.loads(cleaned))
             read_any_successfully = True
-        except OSError:
-            print("Filed to read file", file=sys.stderr)
+        except OSError as e:
+            print("Failed to read file", file=sys.stderr)
+            print(e, file=sys.stderr)
             pass
         except json.JSONDecodeError as e:
-            print("Error parsing JSON document", file=sys.stderr)
+            print(f"Error parsing JSON document: {filepath}", file=sys.stderr)
             print(f"{e.msg}: line {e.lineno} column {e.colno} (char {e.pos})", file=sys.stderr)
         finally:
             if not is_stdin:
