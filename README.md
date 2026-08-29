@@ -1,6 +1,10 @@
 # Infer JSON
 
-Tool to infer type definitions from JSON data. This is useful for exploring data where schemas don't exist or aren't public. Currently supports TypeScript, Go, and Python
+Tool to generate type definition in TypeScript, Go, and Python from raw JSON data.
+
+Have you ever needed to integrate a JSON API with little or no documentation? This tool lets you take the actual responses and get usable type definitions right away.
+
+For a walkthrough using real API data, see the [real-world example](/real-world-example.md)
 
 ## Installation
 
