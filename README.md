@@ -22,6 +22,18 @@ uv run -m infer_json ...
 python -m infer_json ...
 ```
 
+## Usage
+
+This tool is primarily meant for reading from files, as you often need to iterate to get the type definitions looking the way you want. But the tool also supports reading from stdin.
+
+```sh
+$ infer-json file.json
+$ infer-json data/*.jsonl
+$ curl -s "https://company.domain/api/v2/users" | infer-json
+$ printf '{"hello": "world"}\n{"foo": "bar"}' | infer-json --jsonl
+```
+
+
 ## Examples
 
 ### Basic
