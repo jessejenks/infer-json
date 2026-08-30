@@ -44,7 +44,7 @@ def type_to_ts(t: TypeExpr, config: Config, depth: int = 0) -> str:
 
 
 # JS is actually very permissive but we are conservative for quoting
-_TS_IDENTIFIER = re.compile(r"^[a-zA-Z0-9_]+$")
+_TS_IDENTIFIER_NO_QUOTES = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 def record_to_ts(t: RecordType, config: Config, depth: int = 0) -> str:
@@ -58,7 +58,7 @@ def record_to_ts(t: RecordType, config: Config, depth: int = 0) -> str:
     for key, (field_type, required) in fields:
         s = type_to_ts(field_type, config, depth + 1)
         opt = "" if required else "?"
-        if not _TS_IDENTIFIER.match(key):
+        if not _TS_IDENTIFIER_NO_QUOTES.match(key):
             key = json.dumps(key)
         lines.append(f"{pad}{readonly}{key}{opt}: {s};")
     return "{\n" + "\n".join(lines) + f"\n{closing_pad}}}"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import Container
 
 from .config import Config
 from .type_exprs import (
@@ -48,6 +49,15 @@ def prepare_variants(
     return extracted, variants
 
 
+def make_name_unique(name: str, container: Container) -> str:
+    if name in container:
+        suffix = 2
+        while f"{name}{suffix}" in container:
+            suffix += 1
+        name = f"{name}{suffix}"
+    return name
+
+
 def extract_named_types(
     t: TypeExpr,
     path: list[str],
@@ -61,11 +71,11 @@ def extract_named_types(
                 new_fields[k] = (extract_named_types(v, path, extracted), r)
                 path.pop()
             name = "".join(normalize_to_pascal(p) for p in path)
-            if name in extracted:
-                suffix = 2
-                while f"{name}{suffix}" in extracted:
-                    suffix += 1
-                name = f"{name}{suffix}"
+            if not name:
+                name = "_"
+            elif name[0].isdigit():
+                name = f"_{name}"
+            name = make_name_unique(name, extracted)
             extracted[name] = RecordType(new_fields)
             return NamedRef(name)
         case "list":

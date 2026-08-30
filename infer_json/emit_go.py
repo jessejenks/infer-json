@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .config import Config
-from .emit import get_indent, normalize_to_pascal
+from .emit import get_indent, make_name_unique, normalize_to_pascal
 from .type_exprs import Null, RecordType, TypeExpr
 
 
@@ -37,8 +37,13 @@ def struct_to_go(t: RecordType, config: Config, depth: int = 0) -> str:
     closing_pad = get_indent(depth, config)
     fields = sorted(t.fields.items()) if config.sort_keys else list(t.fields.items())
     lines: list[str] = []
+    field_names = set[str]()
     for key, (field_type, required) in fields:
         field_name = normalize_to_pascal(key)
+        if not field_name:
+            field_name = "_"
+        field_name = make_name_unique(field_name, field_names)
+        field_names.add(field_name)
         if not required:
             tag = f'`json:"{key},omitempty"`'
         else:

@@ -49,7 +49,7 @@ def type_to_py(t: TypeExpr, config: Config, depth: int = 0, name: str = "") -> s
 
 def record_to_py(t: RecordType, config: Config, depth: int = 0, name: str = "") -> str:
     if not t.fields:
-        return f"{name} = TypedDict({json.dumps(name)})"
+        return f"{name} = TypedDict({json.dumps(name)}, {{}})"
     pad = get_indent(depth + 1, config)
     closing_pad = get_indent(depth, config)
     fields = sorted(t.fields.items()) if config.sort_keys else list(t.fields.items())
