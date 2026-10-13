@@ -1,6 +1,8 @@
 # Infer JSON
 
-Tool to generate type definition in TypeScript, Go, and Python from raw JSON data.
+[![CodeQL](https://github.com/jessejenks/infer-json/actions/workflows/codeql.yml/badge.svg)](https://github.com/jessejenks/infer-json/actions?query=workflow%3ACodeQL)
+
+Tool to generate type definitions in TypeScript, Go, and Python from raw JSON data.
 
 Have you ever needed to integrate a JSON API with little or no documentation? This tool lets you take the actual responses and get usable type definitions right away.
 
@@ -33,6 +35,37 @@ $ curl -s "https://company.domain/api/v2/users" | infer-json
 $ printf '{"hello": "world"}\n{"foo": "bar"}' | infer-json --jsonl
 ```
 
+## Security
+
+This tool produces code directly from data. You should never run that code without looking at it first. That said, I've tried to sanitize all inputs to prevent code injection.
+
+For instance
+
+```json
+{
+    "}; fetch(\"malicious\").then(doSomethingBad); type bar = { foo": "value"
+}
+```
+
+is valid JSON, and would be pretty bad if this was directly included in your generated TypeScript code!
+
+```ts
+// bad!
+type Root = {
+	}; fetch("malicious").then(doSomethingBad); type bar = { foo: string;
+};
+```
+
+Instead, we properly escape field names
+
+```ts
+// good :)
+type Root = {
+	"}; fetch(\"malicious\").then(doSomethingBad); type bar = { foo": string;
+};
+```
+
+In addition to unit tests, CI runs CodeQL's security-extended queries plus a [custom taint-tracking query](./queries/sanitizes.ql) to trace strings and JSON keys through the emitters and flag any that reach the generated code without passing through a sanitizer.
 
 ## Examples
 
@@ -56,11 +89,11 @@ infer-json examples/basic.json
 
 ```ts
 type Root = {
-  name: string;
-  count: number;
-  ratio: number;
-  completedAt: null;
-  days: string[];
+	name: string;
+	count: number;
+	ratio: number;
+	completedAt: null;
+	days: string[];
 };
 ```
 
@@ -103,7 +136,7 @@ infer-json examples/string-literals.jsonl
 
 ```ts
 type Root = {
-  foo: string;
+	foo: string;
 };
 ```
 
@@ -115,7 +148,7 @@ infer-json examples/string-literals.jsonl --max-literals 2
 
 ```ts
 type Root = {
-  foo: "a" | "b";
+	foo: "a" | "b";
 };
 ```
 
@@ -158,18 +191,18 @@ infer-json examples/discriminating.jsonl
 
 ```ts
 type Variant0 = {
-  type: string;
-  bark: boolean;
+	type: string;
+	bark: boolean;
 };
 
 type Variant1 = {
-  type: string;
-  purr: boolean;
+	type: string;
+	purr: boolean;
 };
 
 type Variant2 = {
-  type: string;
-  lives: number;
+	type: string;
+	lives: number;
 };
 
 type Root = Variant0 | Variant1 | Variant2;
@@ -183,14 +216,14 @@ infer-json examples/discriminating.jsonl --find-discriminant
 
 ```ts
 type Dog = {
-  type: "dog";
-  bark: boolean;
+	type: "dog";
+	bark: boolean;
 };
 
 type Cat = {
-  type: "cat";
-  purr?: boolean;
-  lives?: number;
+	type: "cat";
+	purr?: boolean;
+	lives?: number;
 };
 
 type Root = Dog | Cat;
@@ -285,12 +318,12 @@ infer-json examples/nested.json
 
 ```ts
 type RootNested = {
-  bar: number;
+	bar: number;
 };
 
 type Root = {
-  foo: string;
-  nested: RootNested;
+	foo: string;
+	nested: RootNested;
 };
 ```
 
@@ -334,23 +367,23 @@ infer-json examples/merge-objects.jsonl
 
 ```ts
 type Variant0 = {
-  key1: number;
-  key2: number;
-  key3: number;
+	key1: number;
+	key2: number;
+	key3: number;
 };
 
 type Variant1 = {
-  key1: number;
-  key2: number;
-  key3: number;
-  key4: number;
+	key1: number;
+	key2: number;
+	key3: number;
+	key4: number;
 };
 
 type Variant2 = {
-  key1: number;
-  key2: number;
-  key3: number;
-  key5: number;
+	key1: number;
+	key2: number;
+	key3: number;
+	key5: number;
 };
 
 type Root = Variant0 | Variant1 | Variant2;
@@ -420,11 +453,11 @@ This means objects with at least 3 shared keys should be merged.
 
 ```ts
 type Root = {
-  key1: number;
-  key2: number;
-  key3: number;
-  key4?: number;
-  key5?: number;
+	key1: number;
+	key2: number;
+	key3: number;
+	key4?: number;
+	key5?: number;
 };
 ```
 
@@ -467,7 +500,7 @@ infer-json examples/map.jsonl
 
 ```ts
 type Variant0 = {
-  enable: boolean;
+	enable: boolean;
 };
 
 type Root = Variant0 | Record<string, boolean | string>;
@@ -490,6 +523,10 @@ type Root = Variant0 | dict[str, bool | str]
 ```
 
 The `-K` or `--max-key-length` option controls this threshold. Setting it to 0 disables map detection entirely.
+
+```sh
+infer-json examples/map.jsonl --max-key-length 0
+```
 
 ```ts
 type Variant0 = {
@@ -615,7 +652,7 @@ type Root = {
 
 By default, the root type is called `Root`, anonymous variants are numbered `Variant0`, `Variant1`, etc., and discriminant-derived names like `Dog` or `Cat` are used as-is. These can be customized with three independent flags.
 
-Note that provided names are converted to Pascal case and non-alphanumeric characters are removed.
+Note that provided names, and names derived from data like discriminant values, are converted to Pascal case and characters other than letters and digits are removed. A note is printed to stderr when a provided name is changed.
 
 #### `--root`
 
@@ -643,14 +680,14 @@ infer-json examples/discriminating.jsonl --find-discriminant --root Animal
 
 ```ts
 type Dog = {
-  type: "dog";
-  bark: boolean;
+	type: "dog";
+	bark: boolean;
 };
 
 type Cat = {
-  type: "cat";
-  purr?: boolean;
-  lives?: number;
+	type: "cat";
+	purr?: boolean;
+	lives?: number;
 };
 
 type Animal = Dog | Cat;
@@ -666,14 +703,14 @@ infer-json examples/discriminating.jsonl --find-discriminant --root Animal --pre
 
 ```ts
 type MyDog = {
-  type: "dog";
-  bark: boolean;
+	type: "dog";
+	bark: boolean;
 };
 
 type MyCat = {
-  type: "cat";
-  purr?: boolean;
-  lives?: number;
+	type: "cat";
+	purr?: boolean;
+	lives?: number;
 };
 
 type MyAnimal = MyDog | MyCat;
@@ -689,23 +726,23 @@ infer-json examples/merge-objects.jsonl --root Api --variant Case
 
 ```ts
 type Case0 = {
-  key1: number;
-  key2: number;
-  key3: number;
+	key1: number;
+	key2: number;
+	key3: number;
 };
 
 type Case1 = {
-  key1: number;
-  key2: number;
-  key3: number;
-  key4: number;
+	key1: number;
+	key2: number;
+	key3: number;
+	key4: number;
 };
 
 type Case2 = {
-  key1: number;
-  key2: number;
-  key3: number;
-  key5: number;
+	key1: number;
+	key2: number;
+	key3: number;
+	key5: number;
 };
 
 type Api = Case0 | Case1 | Case2;
@@ -718,7 +755,7 @@ These flags can be combined. For example, `--prefix Response --variant Case` pro
 - `-L` or `--max-literal-length`: When using `--max-literals`, string literals longer than this are widened to `string`. This prevents long values like UUIDs or URLs from being kept as literals. Set to 0 to disable.
 - `--jsonl`: Force all input files to be parsed as JSONL, regardless of file extension.
 - `-s` or `--sort-keys`: Sort object keys alphabetically in output.
-- `--readonly`: Emit `readonly` fields in TypeScript output. Ignored for Go.
+- `--readonly`: Emit `readonly` fields in TypeScript output and `Readonly[...]` fields in Python. Ignored for Go.
 - `--use-spaces`: Use spaces for indentation instead of tabs.
 - `--tab-width`: Number of spaces per indentation level (default 2, only used with `--use-spaces`).
 
@@ -734,8 +771,8 @@ Typical performance on a modern laptop:
 
 This project grew out of a script I wrote for generating Go structs from JSON API responses. I ran into a similar issue on a TypeScript project and realized this could be a useful project. 
 
-You can see more details about the underling type system in the [typing document](/typing.md)
+You can see more details about the underlying type system in the [typing document](/typing.md)
 
 ---
 
-[^1]: In type theory literature, record types as what we would call objects or dictionaries. But this is slightly at odds with TypeScript terminology which uses the `Record` type to mean a generic mapping like `Record<string, number>`. But this distinction is not totally clear because TS allows things like `Record<"a" | "b", number>` which is effectively equivalent to `{"a": number; "b": number}`.
+[^1]: In type theory literature, record types are what we would call objects or dictionaries. But this is slightly at odds with TypeScript terminology which uses the `Record` type to mean a generic mapping like `Record<string, number>`. But this distinction is not totally clear because TS allows things like `Record<"a" | "b", number>` which is effectively equivalent to `{"a": number; "b": number}`.
