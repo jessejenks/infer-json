@@ -23,7 +23,7 @@ def type_to_py(t: TypeExpr, config: Config, depth: int = 0, name: str = "") -> s
                 return f"{prefix}str"
             return f"{prefix}{t.name}"
         case "string_literal":
-            return f"{prefix}Literal[{json.dumps(t.value)}]"
+            return f"{prefix}Literal[{json.dumps(t.value, ensure_ascii=False)}]"
         case "ref":
             # aliasing?
             return f"{prefix}{t.name}"
@@ -49,13 +49,13 @@ def type_to_py(t: TypeExpr, config: Config, depth: int = 0, name: str = "") -> s
 
 def record_to_py(t: RecordType, config: Config, depth: int = 0, name: str = "") -> str:
     if not t.fields:
-        return f"{name} = TypedDict({json.dumps(name)}, {{}})"
+        return f"{name} = TypedDict({json.dumps(name, ensure_ascii=False)}, {{}})"
     pad = get_indent(depth + 1, config)
     closing_pad = get_indent(depth, config)
     fields = sorted(t.fields.items()) if config.sort_keys else list(t.fields.items())
     lines = []
     for key, (field_type, required) in fields:
-        key = json.dumps(key)
+        key = json.dumps(key, ensure_ascii=False)
         s = type_to_py(field_type, config, depth + 1)
         if required and config.readonly:
             lines.append(f"{pad}{key}: Readonly[{s}],")
@@ -65,4 +65,4 @@ def record_to_py(t: RecordType, config: Config, depth: int = 0, name: str = "") 
             lines.append(f"{pad}{key}: Readonly[NotRequired[{s}]],")
         else:
             lines.append(f"{pad}{key}: NotRequired[{s}],")
-    return f"{name} = TypedDict({json.dumps(name)}, {{\n" + "\n".join(lines) + f"\n{closing_pad}}})"
+    return f"{name} = TypedDict({json.dumps(name, ensure_ascii=False)}, {{\n" + "\n".join(lines) + f"\n{closing_pad}}})"

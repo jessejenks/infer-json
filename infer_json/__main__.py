@@ -7,7 +7,7 @@ import re
 import sys
 
 from .config import Config
-from .emit import needs_root_definition, prepare_variants
+from .emit import needs_root_definition, normalize_to_pascal, prepare_variants
 from .emit_go import type_to_go
 from .emit_py import type_to_py
 from .emit_ts import type_to_ts
@@ -42,11 +42,24 @@ def _clean_line(line: str) -> str:
     return line.strip()
 
 
+def _clean_name(flag: str, value: str, default: str = "") -> str:
+    name = normalize_to_pascal(value) or default
+    if name[:1].isdigit():
+        name = f"_{name}"
+    if name != value:
+        print(f"// Using {name!r} for {flag} {value!r}", file=sys.stderr)
+    return name
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="infer-json", description="Infer types from JSON/JSONL files")
     parser.add_argument("--version", action="version", version=f"%(prog)s {importlib.metadata.version('infer-json')}")
     Config.attach_arguments(parser)
     args = parser.parse_args(namespace=Config())
+
+    args.prefix = _clean_name("--prefix", args.prefix)
+    args.root = _clean_name("--root", args.root, "Root")
+    args.variant = _clean_name("--variant", args.variant, "Variant")
 
     if args.output == "go":
         args.max_literals = 0
@@ -76,7 +89,6 @@ def main() -> None:
         except OSError as e:
             print("Failed to read file", file=sys.stderr)
             print(e, file=sys.stderr)
-            pass
         except json.JSONDecodeError as e:
             print(f"Error parsing JSON document: {filepath}", file=sys.stderr)
             print(f"{e.msg}: line {e.lineno} column {e.colno} (char {e.pos})", file=sys.stderr)
@@ -92,6 +104,7 @@ def main() -> None:
     named_types = run_pipeline(items, args)
     extracted, variants = prepare_variants(named_types, args)
 
+    error_count = 0
     match args.output:
         case "typescript" | "ts":
             for type_name, type_expr in extracted.items():
@@ -101,9 +114,14 @@ def main() -> None:
                 return
             if needs_root_definition(named_types):
                 print(f"type {args.prefix}{args.root} = {' | '.join(variant_names)};")
+
         case "go":
             for type_name, type_expr in extracted.items():
-                print(f"type {type_name} {type_to_go(type_expr, args)}\n")
+                try:
+                    print(f"type {type_name} {type_to_go(type_expr, args)}\n")
+                except ValueError as e:
+                    error_count += 1
+                    print(f"// ERROR: {e}")
             variant_names = [type_to_go(v, args) for v in variants]
             if not variants:
                 return
@@ -124,6 +142,9 @@ def main() -> None:
                     print(f"type {args.prefix}{args.root} = {' | '.join(type_to_py(v, args) for v in variants)}")
                     return
                 print(type_to_py(variants[0], args, name=f"{args.prefix}{args.root}"))
+
+    if error_count > 0:
+        print(f"// Encountered {error_count} error(s) while emitting")
 
 
 if __name__ == "__main__":

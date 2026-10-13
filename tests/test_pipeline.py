@@ -265,7 +265,7 @@ class TestNaming:
 
     def test_custom_root_name(self):
         named_types = run_pipeline([{"foo": 1}], Config(root="Api"))
-        assert named_types[0][0] == None
+        assert named_types[0][0] is None
 
 
 class TestDiscriminantDiscovery:

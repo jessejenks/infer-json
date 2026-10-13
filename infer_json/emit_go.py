@@ -30,6 +30,13 @@ def type_to_go(t: TypeExpr, config: Config) -> str:
     raise ValueError(f"Unhandled type kind: {t.kind}")
 
 
+def _is_valid_go_tag_name(key: str) -> bool:
+    # based on isValidTag in Go's encoding/json
+    if key:
+        return all(c.isalpha() or c.isdecimal() or c in "!#$%&()*+-./:;<=>?@[]^_{|}~ " for c in key)
+    return False
+
+
 def struct_to_go(t: RecordType, config: Config, depth: int = 0) -> str:
     if not t.fields:
         return "struct{}"
@@ -40,10 +47,12 @@ def struct_to_go(t: RecordType, config: Config, depth: int = 0) -> str:
     field_names = set[str]()
     for key, (field_type, required) in fields:
         field_name = normalize_to_pascal(key)
-        if not field_name:
-            field_name = "_"
+        if not field_name or not field_name[0].isupper():
+            field_name = f"X{field_name}"
         field_name = make_name_unique(field_name, field_names)
         field_names.add(field_name)
+        if not _is_valid_go_tag_name(key):
+            raise ValueError(f"Key cannot be used as a Go struct tag: {key!r}")
         if not required:
             tag = f'`json:"{key},omitempty"`'
         else:

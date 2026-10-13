@@ -134,6 +134,8 @@ def _collect_literal_values(t: TypeExpr, out: set[str]) -> None:
         case "union":
             for m in t.members:
                 _collect_literal_values(m, out)
+        case _:
+            pass
 
 
 def count_literals(t: TypeExpr) -> int:
@@ -166,7 +168,7 @@ def widen_literals(t: TypeExpr, discriminant_key: str | None, config: Config) ->
             flat = t.members if t._normalized else merge_union_members(flatten_union_members(t.members))
             n = count_literals(t)
             if n > config.max_literals:
-                widened = []
+                widened: list[TypeExpr] = []
                 for m in flat:
                     if m.kind == "string_literal":
                         widened.append(StringType)

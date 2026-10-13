@@ -41,6 +41,11 @@ class TestNormalizeToPascal:
     def test_replace_non_alphanumeric(self):
         assert normalize_to_pascal("!_@#hello≤1234#@_!") == "Hello1234"
 
+    def test_unicode(self):
+        assert normalize_to_pascal("名前") == "名前"
+        assert normalize_to_pascal("café_au_lait") == "CaféAuLait"
+        assert normalize_to_pascal("n²") == "N"
+
 
 class TestTypeToTs:
     def test_primitives(self):
@@ -115,6 +120,24 @@ class TestTypeToGo:
         result = type_to_go(t, Config())
         assert 'Name *string `json:"name,omitempty"`' in result
 
+    def test_leading_digit_field_name(self):
+        t = RecordType({"1st": (IntType, True)})
+        assert 'X1st int `json:"1st"`' in type_to_go(t, Config())
+
+    def test_caseless_field_name(self):
+        t = RecordType({"名前": (IntType, True)})
+        assert 'X名前 int `json:"名前"`' in type_to_go(t, Config())
+
+    def test_empty_field_name(self):
+        t = RecordType({"!!": (IntType, True)})
+        assert 'X int `json:"!!"`' in type_to_go(t, Config())
+
+    @pytest.mark.parametrize("key", ["a`b", 'a"b', "a\\b", "a,b", ""])
+    def test_invalid_tag_key_raises(self, key):
+        t = RecordType({key: (IntType, True)})
+        with pytest.raises(ValueError):
+            type_to_go(t, Config())
+
 
 class TestTypeToPy:
     def test_primitives(self):
@@ -144,15 +167,19 @@ class TestTypeToPy:
     def test_record(self):
         t = RecordType({"name": (StringType, True), "age": (IntType, True)})
         result = type_to_py(t, Config(), name="Name")
-        assert 'Name = TypedDict("Name",'
+        assert 'Name = TypedDict("Name",' in result
         assert '"name": str' in result
         assert '"age": int' in result
 
     def test_optional_fields(self):
         t = RecordType({"name": (StringType, False)})
         result = type_to_py(t, Config(), name="Name")
-        assert 'Name = TypedDict("Name",'
+        assert 'Name = TypedDict("Name",' in result
         assert '"name": NotRequired[str]' in result
+
+    def test_non_bmp_key(self):
+        t = RecordType({"😀": (IntType, True)})
+        assert '"😀": int' in type_to_py(t, Config(), name="Name")
 
 
 class TestExtractNamedTypes:

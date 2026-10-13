@@ -83,7 +83,7 @@ class Config(argparse.Namespace):
         parser.add_argument(
             "--readonly",
             action="store_true",
-            help="Emit readonly fields in TypeScript output (ignored for Go)",
+            help="Emit readonly fields in TypeScript and Python output (ignored for Go)",
         )
         parser.add_argument(
             "--use-spaces",

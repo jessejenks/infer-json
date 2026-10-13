@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Container
 
 from .config import Config
@@ -15,7 +14,7 @@ from .type_exprs import (
 
 
 def normalize_to_pascal(s: str) -> str:
-    normalized = re.sub(r"[^a-zA-Z0-9]", "_", s)
+    normalized = "".join(c if c.isalpha() or c.isdecimal() else "_" for c in s)
     return "".join(w[0].upper() + w[1:] for w in normalized.split("_") if w)
 
 
