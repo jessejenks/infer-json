@@ -1,0 +1,11 @@
+name: infer-json CodeQL config
+
+threat-models: local
+
+queries:
+  - uses: security-extended
+  - uses: ./queries
+
+query-filters:
+  - exclude:
+      id: py/path-injection
